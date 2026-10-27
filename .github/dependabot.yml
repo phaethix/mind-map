@@ -1,11 +1,12 @@
 # 依赖更新交给 Dependabot：
+# - JS 依赖走 bun 生态：bun.lock 是唯一的锁文件，PR 里只会出现它
 # - 只自动处理次要版本和补丁，合并成每个生态一个 PR
 # - 主版本（vite、eslint、vue-router、uuid、zip、rfd 等）需要人工评估，
 #   统一忽略；升级时手动改 package.json / Cargo.toml，或临时移除对应 ignore
 # - GitHub Actions 的主版本单独分组，这类升级通常只改运行时版本
 version: 2
 updates:
-  - package-ecosystem: npm
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
@@ -18,7 +19,7 @@ updates:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
 
-  - package-ecosystem: npm
+  - package-ecosystem: bun
     directory: /web
     schedule:
       interval: weekly
@@ -31,7 +32,7 @@ updates:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
 
-  - package-ecosystem: npm
+  - package-ecosystem: bun
     directory: /desktop
     schedule:
       interval: weekly

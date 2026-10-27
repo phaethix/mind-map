@@ -66,22 +66,6 @@ jobs:
       - name: Check formatting
         run: bun x prettier --check .
 
-      # Dependabot 只改 package-lock.json，bun.lock 会悄悄落后于它。
-      # 这里把 package-lock.json 重新迁移一遍，与提交的 bun.lock 比对：不一致就失败，
-      # 免得本地 bun install 装到旧版本、CI 装到新版本。
-      - name: Check lockfiles are in sync
-        run: |
-          for dir in . web desktop; do
-            tmp=$(mktemp -d)
-            cp "$dir/package.json" "$dir/package-lock.json" "$tmp/"
-            (cd "$tmp" && bun install --lockfile-only >/dev/null)
-            if ! diff -u "$dir/bun.lock" "$tmp/bun.lock"; then
-              echo "::error file=$dir/bun.lock::$dir/bun.lock 与 package-lock.json 不同步：先跑 npm install --package-lock-only，再跑 bun install --lockfile-only，两份锁文件一起提交"
-              exit 1
-            fi
-            rm -rf "$tmp"
-          done
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:

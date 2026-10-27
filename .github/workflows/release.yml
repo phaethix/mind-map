@@ -69,12 +69,18 @@ jobs:
           # 手动触发时默认只取分支，这里显式取 tag，保证打出来的包版本号对得上
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      # 不在这里缓存 npm / cargo：tag 的 ref 每次都是新的，缓存永远命中不了，
+      # 不在这里缓存 bun / cargo：tag 的 ref 每次都是新的，缓存永远命中不了，
       # 只会在每次发布后留下几十 MB 的一次性缓存
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
+
+      # 安装依赖用 Bun，构建脚本仍由 Node 执行（tauri 的钩子里是 node / npm run）
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -92,17 +98,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
-      # vue-cli 4 的传递依赖会刷几十条 deprecated / EBADENGINE 警告，
-      # 这些只能靠迁移整条构建链消除，安装时只保留错误输出
+      # --frozen-lockfile：bun.lock 与 package.json 对不上就直接失败，
+      # 发布包不能装到与仓库不一致的依赖
       - name: Install web dependencies
         working-directory: web
-        run: npm ci --no-audit --no-fund --loglevel=error
+        run: bun install --frozen-lockfile
 
       - name: Install desktop dependencies
         working-directory: desktop
-        run: npm ci --no-audit --no-fund --loglevel=error
+        run: bun install --frozen-lockfile
 
-      # 放在 npm ci 之后：它会改 web/package.json 的 version，避免和 lockfile 的校验撞上。
+      # 放在装依赖之后：它会改 web/package.json 的 version，避免和 lockfile 的校验撞上。
       # 用 GitHub 表达式而不是 ${VAR}：Windows runner 默认是 pwsh，读不到 bash 风格的变量
       - name: Sync version into manifests
         run: node scripts/sync-version.mjs "${{ env.RELEASE_TAG }}"
@@ -121,7 +127,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          npx tauri build --bundles ${{ matrix.bundles }} \
+          bunx tauri build --bundles ${{ matrix.bundles }} \
             --config '{"bundle":{"createUpdaterArtifacts":true}}'
 
       - name: Collect bundles

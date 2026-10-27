@@ -51,7 +51,7 @@ bootstrap-node:
 #
 # 只认 lockfile：改 package.json 的脚本之类不该触发整包重装。
 # --frozen-lockfile 让 bun 在 package.json 与 bun.lock 不一致时直接失败，
-# 相当于 npm ci 对 package-lock.json 的校验。
+# 不会悄悄装出和仓库不同的版本。
 #
 # bootstrap-node 是伪目标，每次都会"更新"；当普通前置依赖会让这条规则永远重跑
 # bun install。改成 order-only，只保证顺序，不参与时间戳比较。

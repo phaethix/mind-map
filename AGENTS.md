@@ -25,26 +25,26 @@ make web        # web dev server only
 cd web && bun install --frozen-lockfile
 cd web && npm run build
 
-npx prettier --check .
+bun x prettier --check .
 cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check
 cargo check --manifest-path desktop/src-tauri/Cargo.toml
 
-node web/src/utils/fileLibrary.test.cjs
-node web/src/utils/mermaidMindmap.test.cjs
+bun web/src/utils/fileLibrary.test.cjs
+bun web/src/utils/mermaidMindmap.test.cjs
 ```
 
 Use Node 20.11 or newer: the build toolchain relies on `import.meta.dirname`.
 
-Dependencies are installed with Bun 1.4+ (`bun.lock` in the root, `web/` and `desktop/`), but the scripts still run on Node — `vite` and `tauri` are resolved through their node shebangs, and the Tauri hooks call `node` / `npm run` directly. `package-lock.json` stays in the tree for one release cycle so CI keeps using `npm ci`; after changing a dependency, refresh both files (`cd web && bun install`, then `npm install --package-lock-only`) and commit them together.
+Dependencies are installed with Bun 1.4+; `bun.lock` in the root, `web/` and `desktop/` is the only lockfile, and CI runs `bun install --frozen-lockfile`, so it fails whenever `package.json` and the lockfile disagree. After changing a dependency run `bun install` in that folder and commit the updated `bun.lock`. The scripts still run on Node — `vite` and `tauri` are resolved through their node shebangs, and the Tauri hooks call `node` / `npm run` directly.
 
 ## Conventions
 
-- Run `npx prettier --check .` after any frontend change, and `cargo fmt` after any Rust change.
+- Run `bun x prettier --check .` after any frontend change, and `cargo fmt` after any Rust change.
 - `web` also has eslint (`npm run lint`). It is not wired into CI and currently reports 68 pre-existing problems, so fix what your change touches instead of attempting a repo-wide cleanup.
 - Write code comments in Chinese, as the existing files do. Keep user-facing strings in `web/src/lang/` and add every new key to `zh_cn`, `zh_tw`, `en_us` and `vi_vn`.
 - Return Chinese, human-readable error strings from Tauri commands.
 - Register every new Tauri command in `desktop/src-tauri/build.rs` and grant it in `desktop/src-tauri/capabilities/default.json`.
-- Regenerate icons from the SVG instead of editing PNGs: `cd desktop && npx tauri icon ../assets/icon/icon.svg && cp src-tauri/icons/icon.ico ../web/public/logo.ico`.
+- Regenerate icons from the SVG instead of editing PNGs: `cd desktop && bunx tauri icon ../assets/icon/icon.svg && cp src-tauri/icons/icon.ico ../web/public/logo.ico`.
 - Commit with Conventional Commits (`feat:`, `fix:`, `perf:`, `docs:`, `style:`, `refactor:`, `test:`, `build:`, `ci:`, `chore:`, `revert:`), lowercase and imperative, no trailing period.
 
 ## Releases
@@ -57,5 +57,5 @@ Updater artifacts are signed with the `TAURI_SIGNING_PRIVATE_KEY` secret; withou
 
 ## Pull requests
 
-- One concern per pull request, linked to an issue. CI runs `title`, `format`, `cargo` and `build`; all four must pass before merge. `format` also checks that `bun.lock` still matches `package-lock.json` in all three package folders, and `build` runs the three test scripts before bundling.
+- One concern per pull request, linked to an issue. CI runs `title`, `format`, `cargo` and `build`; all four must pass before merge. `format` runs on Bun and owns Prettier, and `build` runs the three test scripts before bundling.
 - PR titles follow Conventional Commits — they become the squash commit subject.
