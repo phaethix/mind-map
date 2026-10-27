@@ -6,8 +6,13 @@ APP := $(CARGO_TARGET_DIR)/release/bundle/macos/Mind.app
 INSTALL_DIR := $(HOME)/Applications
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
-# bootstrap installs node and rust into the home directory; make sure later steps see them
-export PATH := $(HOME)/.local/bin:$(HOME)/.cargo/bin:$(PATH)
+# bootstrap installs bun, node and rust into the home directory; make sure later steps see them
+export PATH := $(HOME)/.local/bin:$(HOME)/.bun/bin:$(HOME)/.cargo/bin:$(PATH)
+
+# 依赖安装交给 Bun：同样的锁文件，安装速度和内存都明显优于 npm ci。
+# 脚本仍然用 npm 跑：vite / tauri 的 bin 是 node shebang，运行时没换，只是装包换人。
+# Windows 上 bun.exe 可直接执行，不需要下面 NPM 那种 sh 兜底。
+BUN = bun
 
 # Windows 上 node 自带的 npm 没有扩展名，是个 bash 脚本（shebang: #!/usr/bin/env bash）。
 # 某些 POSIX 层（比如 cygwin）无法直接 exec 它，会报
@@ -41,20 +46,23 @@ bootstrap:
 bootstrap-node:
 	@sh scripts/bootstrap.sh node
 
-# npm prints a warn line for every deprecated transitive dependency of the vue-cli 4
-# toolchain. Those cannot be fixed from this repository, so keep the install quiet
-# and let only errors through.
-# 只认 lockfile：改 package.json 的脚本之类不该触发整包重装
+# 安装不再需要 npm 的 --no-audit / --loglevel 参数：Bun 默认只输出结果，
+# 被拦下的生命周期脚本用 `bun pm untrusted` 单独查看。
+#
+# 只认 lockfile：改 package.json 的脚本之类不该触发整包重装。
+# --frozen-lockfile 让 bun 在 package.json 与 bun.lock 不一致时直接失败，
+# 相当于 npm ci 对 package-lock.json 的校验。
+#
 # bootstrap-node 是伪目标，每次都会"更新"；当普通前置依赖会让这条规则永远重跑
-# npm ci。改成 order-only，只保证顺序，不参与时间戳比较。
-web/node_modules: web/package-lock.json | bootstrap-node
+# bun install。改成 order-only，只保证顺序，不参与时间戳比较。
+web/node_modules: web/bun.lock | bootstrap-node
 	@printf '  web: installing dependencies...\n'
-	@cd web && $(NPM) ci --no-audit --no-fund --loglevel=error
+	@cd web && $(BUN) install --frozen-lockfile
 	@touch $@
 
-desktop/node_modules: desktop/package-lock.json
+desktop/node_modules: desktop/bun.lock | bootstrap-node
 	@printf '  desktop: installing dependencies...\n'
-	@cd desktop && $(NPM) ci --no-audit --no-fund --loglevel=error
+	@cd desktop && $(BUN) install --frozen-lockfile
 	@touch $@
 
 web: web/node_modules

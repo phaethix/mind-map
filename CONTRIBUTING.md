@@ -32,7 +32,10 @@ Every issue carries one type label, usually one or two area labels, and `needs t
    ```bash
    npx prettier --check .
    cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check
-   cd web && npm run build
+   bun web/src/utils/fileLibrary.test.cjs
+   bun web/src/utils/mermaidMindmap.test.cjs
+   bun simple-mind-map/test/xmind-associative-line.test.cjs
+   cd web && bun install --frozen-lockfile && npm run build
    ```
 
    The same checks run in CI on every pull request.
@@ -52,7 +55,7 @@ The merged title becomes the commit subject on `main`, so it follows the same ru
 
 ## Build notes
 
-- **Node 14+** is required everywhere. `scripts/bootstrap.sh` only installs Node automatically on macOS; on Linux and Windows install it yourself and run `make` again.
+- **Node 20.11+ and Bun 1.4+** are required. Dependencies are installed with `bun install --frozen-lockfile` (`web/bun.lock`, `desktop/bun.lock`), while the build scripts still run on Node. `scripts/bootstrap.sh` installs both automatically on macOS and Linux; on Windows install them yourself and run `make` again.
 - **Line endings.** `.gitattributes` pins the files the shell parses to LF. Windows working trees created before that file existed need one re-checkout or a fresh clone.
 - **Desktop builds** are macOS-only today: `make` produces `Mind.app` in `~/Applications`.
 

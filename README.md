@@ -48,12 +48,12 @@ Installed builds update themselves in place; builds from before 0.1.3 need one m
 
 ## Build from source
 
-| Item      | Detail                                                   |
-| --------- | -------------------------------------------------------- |
-| Requires  | Xcode Command Line Tools — `xcode-select --install`      |
-| Toolchain | `scripts/bootstrap.sh` installs Node and Rust if missing |
-| Install   | `make`; `Mind.app` ends up in `~/Applications`           |
-| Documents | `~/Documents/Mind`                                       |
+| Item      | Detail                                                        |
+| --------- | ------------------------------------------------------------- |
+| Requires  | Xcode Command Line Tools — `xcode-select --install`           |
+| Toolchain | `scripts/bootstrap.sh` installs Node, Bun and Rust if missing |
+| Install   | `make`; `Mind.app` ends up in `~/Applications`                |
+| Documents | `~/Documents/Mind`                                            |
 
 ```bash
 make open      # launch the installed app

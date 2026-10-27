@@ -54,17 +54,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Setup Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      # 这一步只用到 prettier：装上 Bun 就能跑，不必再装 Node 和 npm 缓存
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          node-version: 24
-          cache: npm
+          bun-version: 1.4.4
 
       - name: Install tooling
-        run: npm ci --no-audit --no-fund --loglevel=error
+        run: bun install --frozen-lockfile
 
       - name: Check formatting
-        run: npx prettier --check .
+        run: bun x prettier --check .
+
+      # Dependabot 只改 package-lock.json，bun.lock 会悄悄落后于它。
+      # 这里把 package-lock.json 重新迁移一遍，与提交的 bun.lock 比对：不一致就失败，
+      # 免得本地 bun install 装到旧版本、CI 装到新版本。
+      - name: Check lockfiles are in sync
+        run: |
+          for dir in . web desktop; do
+            tmp=$(mktemp -d)
+            cp "$dir/package.json" "$dir/package-lock.json" "$tmp/"
+            (cd "$tmp" && bun install --lockfile-only >/dev/null)
+            if ! diff -u "$dir/bun.lock" "$tmp/bun.lock"; then
+              echo "::error file=$dir/bun.lock::$dir/bun.lock 与 package-lock.json 不同步：先跑 npm install --package-lock-only，再跑 bun install --lockfile-only，两份锁文件一起提交"
+              exit 1
+            fi
+            rm -rf "$tmp"
+          done
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -115,16 +131,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # 构建仍跑在 Node 上：vite 和 copy.js 走的是 node shebang，只有装依赖换成 Bun
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      # Bun 的全局缓存按锁文件哈希保存，命中后装 380MB 依赖只要几百毫秒；
+      # 取代原先 setup-node 的 cache: npm。Bun 升级不失效缓存，锁文件变才失效。
+      - name: Cache Bun packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
 
       - name: Install web dependencies
         working-directory: web
-        run: npm ci --no-audit --no-fund --loglevel=error
+        run: bun install --frozen-lockfile
+
+      # 这三个是无框架的断言脚本，之前只在本地手动跑，CI 从来没执行过。
+      # 放在构建之前：逻辑错误比打包错误更值得先失败。
+      - name: Test
+        run: |
+          bun web/src/utils/fileLibrary.test.cjs
+          bun web/src/utils/mermaidMindmap.test.cjs
+          bun simple-mind-map/test/xmind-associative-line.test.cjs
 
       - name: Build web app
         working-directory: web

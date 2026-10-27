@@ -10,3 +10,5 @@ desktop/src-tauri/target
 docs
 *.json
 pnpm-lock.yaml
+# bun 的锁文件是带注释的类 JSON，Prettier 推断不出 parser，必须跳过
+bun.lock

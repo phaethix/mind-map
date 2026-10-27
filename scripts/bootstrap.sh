@@ -2,10 +2,12 @@
 # Makes `make` a one-command setup: installs whatever is missing, no sudo needed.
 # Everything goes into the current user's home directory.
 #
-#   sh scripts/bootstrap.sh node   # node/npm only, enough for the web app
+#   sh scripts/bootstrap.sh node   # node/npm/bun only, enough for the web app
 #   sh scripts/bootstrap.sh rust   # also ensure the Rust toolchain, needed for the macOS app
 #
 # The script is idempotent: anything already installed is only probed, never reinstalled.
+#
+# 依赖安装用 Bun，构建脚本仍用 Node：两边都要有，缺一个 `make` 都跑不起来。
 set -eu
 
 MODE="${1:-rust}"
@@ -33,6 +35,10 @@ LOCAL_PREFIX="$HOME/.local"
 LOCAL_BIN="$LOCAL_PREFIX/bin"
 NODE_DIST="https://nodejs.org/dist/latest-v22.x"
 MIN_NODE_MAJOR=14
+# 固定版本：本地装的 Bun 与生成 bun.lock 时的版本保持一致，避免解析结果漂移
+BUN_VERSION=1.4.4
+BUN_DIST="https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION"
+MIN_BUN_MAJOR=1
 
 mkdir -p "$LOCAL_BIN"
 PATH="$LOCAL_BIN:$HOME/.cargo/bin:$PATH"
@@ -97,6 +103,61 @@ ensure_node() {
   install_node
 }
 
+install_bun() {
+  # 和 Node 一样只做官方二进制的定点下载：不执行远端脚本，也不改用户的 shell 配置。
+  case "$(uname -s)" in
+    Darwin) bun_os=darwin ;;
+    Linux) bun_os=linux ;;
+    *)
+      die "Automatic Bun installation supports macOS and Linux. Install Bun ${BUN_VERSION}+ from https://bun.sh, then run make again."
+      ;;
+  esac
+
+  command -v curl >/dev/null 2>&1 ||
+    die "curl is required to install Bun automatically."
+  command -v unzip >/dev/null 2>&1 ||
+    die "unzip is required to install Bun automatically (apt install unzip / brew install unzip)."
+
+  case "$(uname -m)" in
+    arm64 | aarch64) bun_arch=aarch64 ;;
+    x86_64) bun_arch=x64 ;;
+    *) die "Unsupported CPU architecture: $(uname -m)" ;;
+  esac
+
+  archive="bun-$bun_os-$bun_arch.zip"
+  folder="bun-$bun_os-$bun_arch"
+  target="$LOCAL_PREFIX/opt/$folder-$BUN_VERSION"
+
+  if [ ! -x "$target/bun" ]; then
+    info "Downloading $archive ..."
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    curl -fsSL "$BUN_DIST/$archive" -o "$tmp/bun.zip" || die "Failed to download Bun."
+    unzip -q "$tmp/bun.zip" -d "$tmp" || die "Failed to extract Bun."
+    mkdir -p "$LOCAL_PREFIX/opt"
+    rm -rf "$target"
+    mv "$tmp/$folder" "$target" || die "Failed to install Bun into $target."
+    rm -rf "$tmp"
+    trap - EXIT
+  fi
+
+  ln -sf "$target/bun" "$LOCAL_BIN/bun"
+  hash -r 2>/dev/null || true
+  info "bun $(bun --version) installed into $target"
+}
+
+ensure_bun() {
+  if command -v bun >/dev/null 2>&1; then
+    major=$(bun --version 2>/dev/null | cut -d. -f1)
+    if [ "${major:-0}" -ge "$MIN_BUN_MAJOR" ] 2>/dev/null; then
+      info "bun $(bun --version) is ready"
+      return
+    fi
+    warn "bun $(bun --version) is too old, ${MIN_BUN_MAJOR}+ is required. Installing a separate copy."
+  fi
+  install_bun
+}
+
 ensure_rust() {
   if command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
     info "$(cargo --version) is ready"
@@ -136,6 +197,7 @@ ensure_rust() {
 }
 
 ensure_node
+ensure_bun
 case "$MODE" in
   rust | desktop | all) ensure_rust ;;
 esac
