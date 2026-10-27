@@ -88,14 +88,14 @@ jobs:
 
       # 命中缓存时不再跑 apt-get update，避免 Ubuntu 源变慢把整步拖到超时
       - name: Install Linux dependencies
-        uses: awalsh128/cache-apt-pkgs-action@b8f4936ae6bd604d21de6c1243d45b013396d81b # v1
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1
         with:
           packages: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
           version: 1.0
 
       # 缓存 ~/.cargo 和 target：依赖只编译一次，之后的运行直接命中
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: desktop/src-tauri
           shared-key: cargo-check
@@ -129,7 +129,7 @@ jobs:
       # Bun 的全局缓存按锁文件哈希保存，命中后装 380MB 依赖只要几百毫秒；
       # 取代原先 setup-node 的 cache: npm。Bun 升级不失效缓存，锁文件变才失效。
       - name: Cache Bun packages
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
