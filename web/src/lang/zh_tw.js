@@ -284,6 +284,7 @@ export default {
     text: '文字',
     fontFamily: '字型',
     fontSize: '字型大小',
+    textAlign: '對齊方式',
     color: '顏色',
     addFontWeight: '粗體',
     italic: '斜體',

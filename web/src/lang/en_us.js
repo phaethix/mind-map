@@ -291,6 +291,7 @@ export default {
     text: 'Text',
     fontFamily: 'Font family',
     fontSize: 'Font size',
+    textAlign: 'Text align',
     color: 'color',
     addFontWeight: 'add font weight',
     italic: 'Italic',

@@ -289,6 +289,7 @@ export default {
     text: 'Văn bản',
     fontFamily: 'Phông chữ',
     fontSize: 'Cỡ chữ',
+    textAlign: 'Căn chỉnh văn bản',
     color: 'Màu sắc',
     addFontWeight: 'Thêm độ đậm chữ',
     italic: 'Nghiêng',

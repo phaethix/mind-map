@@ -32,10 +32,13 @@
             <!-- <span class="name">{{ $t('style.fontSize') }}</span> -->
             <el-select
               size="mini"
-              style="width: 60px"
+              style="width: 80px"
               v-model="style.fontSize"
               placeholder=""
-              @change="update('fontSize')"
+              filterable
+              allow-create
+              default-first-option
+              @change="changeFontSize"
             >
               <el-option
                 v-for="item in fontSizeList"
@@ -47,22 +50,38 @@
               </el-option>
             </el-select>
           </div>
+        </div>
+        <!-- 文字对齐：居中、居左、居右 -->
+        <div class="row">
           <div class="rowItem">
-            <el-select
-              size="mini"
-              style="width: 80px"
-              v-model="style.textAlign"
-              placeholder=""
-              @change="update('textAlign')"
+            <span class="name">{{ $t('style.textAlign') }}</span>
+          </div>
+          <div class="alignBtnGroup">
+            <el-tooltip
+              v-for="item in alignList"
+              :key="item.value"
+              :content="item.name"
+              placement="bottom"
             >
-              <el-option
-                v-for="item in alignList"
-                :key="item.value"
-                :label="item.name"
-                :value="item.value"
+              <div
+                class="styleBtn"
+                :class="{ actived: style.textAlign === item.value }"
+                @click="changeTextAlign(item.value)"
               >
-              </el-option>
-            </el-select>
+                <svg viewBox="0 0 16 16" width="14" height="14">
+                  <rect
+                    v-for="(rect, index) in alignIconRects[item.value]"
+                    :key="index"
+                    :x="rect.x"
+                    :y="rect.y"
+                    :width="rect.width"
+                    height="2"
+                    rx="1"
+                    fill="currentColor"
+                  ></rect>
+                </svg>
+              </div>
+            </el-tooltip>
           </div>
         </div>
         <div class="row">
@@ -532,6 +551,25 @@ import {
 } from '@/config'
 import { mapState } from 'vuex'
 
+// 对齐按钮图标的三根线条，按对齐方式给出每根线条的起点和宽度
+const ALIGN_ICON_RECTS = {
+  left: [
+    { x: 1, y: 3, width: 14 },
+    { x: 1, y: 7, width: 9 },
+    { x: 1, y: 11, width: 12 }
+  ],
+  center: [
+    { x: 1, y: 3, width: 14 },
+    { x: 3.5, y: 7, width: 9 },
+    { x: 2, y: 11, width: 12 }
+  ],
+  right: [
+    { x: 1, y: 3, width: 14 },
+    { x: 6, y: 7, width: 9 },
+    { x: 3, y: 11, width: 12 }
+  ]
+}
+
 // 节点样式设置
 export default {
   components: {
@@ -625,6 +663,9 @@ export default {
     },
     alignList() {
       return alignList[this.$i18n.locale] || alignList.zh
+    },
+    alignIconRects() {
+      return ALIGN_ICON_RECTS
     }
   },
   watch: {
@@ -696,6 +737,37 @@ export default {
           node.setStyle(prop, this.style[prop])
         })
       }
+    },
+
+    // 修改字号，支持下拉选择和手动输入，输入值限定在合理范围内
+    changeFontSize(value) {
+      const raw = typeof value === 'string' ? value.trim() : value
+      const size = Number(raw)
+      // 输入为空或非法时，恢复成节点当前的字号
+      if (raw === '' || raw === null || !Number.isFinite(size)) {
+        if (this.activeNodes.length > 0) {
+          this.style.fontSize = this.activeNodes[0].getStyle('fontSize', false)
+        }
+        return
+      }
+      const nextFontSize = Math.min(Math.max(Math.round(size), 1), 200)
+      // 判断依据要取节点当前的字号：v-model 在触发 change 之前
+      // 已经把style.fontSize改成了新值，拿它比较会永远相等，导致字号设置不生效
+      const currentFontSize = this.activeNodes[0]
+        ? Number(this.activeNodes[0].getStyle('fontSize', false))
+        : NaN
+      this.style.fontSize = nextFontSize
+      // 字号没有变化时不做处理，避免产生空的历史记录和多余的重新渲染
+      if (currentFontSize === nextFontSize) return
+      this.update('fontSize')
+    },
+
+    // 修改文字对齐方式
+    changeTextAlign(value) {
+      // 对齐方式没有变化时不做处理，避免产生空的历史记录和多余的重新渲染
+      if (value === this.style.textAlign) return
+      this.style.textAlign = value
+      this.update('textAlign')
     },
 
     // 切换加粗样式
@@ -850,6 +922,21 @@ export default {
       width: 100%;
       display: flex;
       justify-content: space-between;
+    }
+
+    // 文字对齐三个图标按钮整体靠右排列
+    .alignBtnGroup {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+
+      .styleBtn {
+        width: 30px;
+
+        svg {
+          display: block;
+        }
+      }
     }
 
     .rowItem {
