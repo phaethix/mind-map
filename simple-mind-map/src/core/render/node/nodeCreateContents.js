@@ -278,23 +278,30 @@ function createTextNode(specifyText) {
     textArr[index] = lines.join('\n')
   })
   textArr = textArr.join('\n').replace(/\n$/g, '').split(/\n/gim)
+  // 空行统一替换成零宽字符：避免尾部的空行不占宽度，
+  // 同时解决该问题：https://github.com/wanglin2/mind-map/issues/1037
+  // 先替换再测量，保证宽度测量和实际渲染用的是同一份文本
+  textArr = textArr.map(item => (item === '' ? '\uFEFF' : item))
+  // 居中和右对齐需要按每行宽度计算偏移，其他对齐方式不用额外测量
+  let lineWidthList = []
+  let maxLineWidth = 0
+  if (textAlign === 'center' || textAlign === 'right') {
+    lineWidthList = textArr.map(item => measureText(item, this.style).width)
+    maxLineWidth = Math.max(...lineWidthList)
+  }
   textArr.forEach((item, index) => {
-    // 避免尾部的空行不占宽度
-    // 同时解决该问题：https://github.com/wanglin2/mind-map/issues/1037
-    if (item === '') {
-      item = '﻿'
-    }
     const node = new Text().text(item)
     node.addClass('smm-text-node-wrap')
-    node.attr(
-      'text-anchor',
-      {
-        left: 'start',
-        center: 'middle',
-        right: 'end'
-      }[textAlign] || 'start'
-    )
+    // 统一以文字左边缘为锚点：如果直接用text-anchor居中或右对齐，
+    // 文字会以原点为基准向左溢出，和图标、超链接等前置内容重叠
+    node.attr('text-anchor', 'start')
     this.style.text(node)
+    // 只在多行文字之间体现对齐，文本区域的左边界始终为0
+    if (textAlign === 'center') {
+      node.x((maxLineWidth - lineWidthList[index]) / 2)
+    } else if (textAlign === 'right') {
+      node.x(maxLineWidth - lineWidthList[index])
+    }
     node.y(
       fontSize * noneRichTextNodeLineHeight * index +
         ((noneRichTextNodeLineHeight - 1) * fontSize) / 2
