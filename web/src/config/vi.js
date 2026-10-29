@@ -659,7 +659,7 @@ export const linearGradientDirList = [
 // Căn lề văn bản
 export const alignList = [
   {
-    name: 'Trái:',
+    name: 'Trái',
     value: 'left'
   },
   {
