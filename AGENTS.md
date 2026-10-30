@@ -31,6 +31,7 @@ cargo check --manifest-path desktop/src-tauri/Cargo.toml
 
 bun web/src/utils/fileLibrary.test.cjs
 bun web/src/utils/mermaidMindmap.test.cjs
+bun web/src/utils/githubStatus.test.cjs
 ```
 
 Use Node 20.11 or newer: the build toolchain relies on `import.meta.dirname`.
@@ -57,5 +58,5 @@ Updater artifacts are signed with the `TAURI_SIGNING_PRIVATE_KEY` secret; withou
 
 ## Pull requests
 
-- One concern per pull request, linked to an issue. CI runs `title`, `format`, `cargo` and `build`; all four must pass before merge. `format` runs on Bun and owns Prettier, and `build` runs the three test scripts before bundling.
+- One concern per pull request, linked to an issue. CI runs `title`, `format`, `cargo` and `build`; all four must pass before merge. `format` runs on Bun and owns Prettier, and `build` runs the test scripts before bundling.
 - PR titles follow Conventional Commits — they become the squash commit subject.

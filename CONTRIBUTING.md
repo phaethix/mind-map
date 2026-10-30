@@ -34,6 +34,7 @@ Every issue carries one type label, usually one or two area labels, and `needs t
    cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check
    bun web/src/utils/fileLibrary.test.cjs
    bun web/src/utils/mermaidMindmap.test.cjs
+   bun web/src/utils/githubStatus.test.cjs
    bun simple-mind-map/test/xmind-associative-line.test.cjs
    cd web && bun install --frozen-lockfile && npm run build
    ```

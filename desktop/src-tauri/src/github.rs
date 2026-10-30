@@ -2043,6 +2043,9 @@ mod tests {
             );
         }
         if first.starts_with("GET /user") {
+            if let Some((status, body)) = USER_RESPONSE.lock().unwrap().clone() {
+                return (status, body);
+            }
             return (200, r#"{"login":"octocat"}"#.to_string());
         }
         if first.starts_with("GET /gists/missing") {
@@ -2123,6 +2126,22 @@ mod tests {
     }
 
     static AUTH_TEST: Mutex<()> = Mutex::new(());
+    static USER_RESPONSE: Mutex<Option<(u16, String)>> = Mutex::new(None);
+
+    struct UserResponseGuard;
+
+    impl UserResponseGuard {
+        fn set(status: u16, body: &str) -> Self {
+            *USER_RESPONSE.lock().unwrap() = Some((status, body.to_string()));
+            Self
+        }
+    }
+
+    impl Drop for UserResponseGuard {
+        fn drop(&mut self) {
+            *USER_RESPONSE.lock().unwrap() = None;
+        }
+    }
 
     #[test]
     fn device_flow_stores_token_without_returning_it() {
@@ -2155,6 +2174,10 @@ mod tests {
         let polled = block(auth_poll(&dir.0)).expect("poll");
         assert_eq!(polled.status, "success");
         assert_eq!(polled.login, "octocat");
+        // 重新读状态，相当于侧栏卸载后再挂上：用户名必须还在。
+        let saved = status(&dir.0, "").expect("status");
+        assert!(saved.signed_in);
+        assert_eq!(saved.login, "octocat");
         let rendered = serde_json::to_string(&polled).unwrap();
         assert!(!rendered.contains("gho_test_token"));
         assert!(!rendered.contains("device-123"));
@@ -2174,6 +2197,48 @@ mod tests {
         sign_out(&dir.0).unwrap();
         let after = block(auth_poll(&dir.0)).unwrap();
         assert_eq!(after.status, "cancelled");
+    }
+
+    #[test]
+    fn device_flow_stays_signed_in_when_login_lookup_fails() {
+        let _guard = AUTH_TEST.lock().unwrap();
+        let _user = UserResponseGuard::set(
+            403,
+            r#"{"message":"Resource not accessible by integration"}"#,
+        );
+        let dir = TempDir::new();
+        write_auth_unlocked(
+            &dir.0,
+            &AuthFile {
+                client_id: "Iv1.example".to_string(),
+                ..AuthFile::default()
+            },
+        )
+        .unwrap();
+        let mock = Mock::start();
+        block(auth_start_with(
+            &dir.0,
+            &format!("{}/login/device/code", mock.base),
+            &format!("{}/login/oauth/access_token", mock.base),
+            &mock.base,
+        ))
+        .expect("device code");
+        {
+            let mut gate = lock_gate().unwrap();
+            if let Some(pending) = gate.pending.as_mut() {
+                pending.last_poll = UNIX_EPOCH;
+            }
+        }
+        let polled = block(auth_poll(&dir.0)).expect("poll");
+        assert_eq!(polled.status, "success");
+        assert!(polled.login.is_empty());
+        let saved = status(&dir.0, "").expect("status");
+        assert!(saved.signed_in);
+        assert!(saved.login.is_empty());
+        let raw = fs::read_to_string(auth_path(&dir.0)).unwrap();
+        assert!(raw.contains("gho_test_token"));
+        assert!(!raw.contains("octocat"));
+        sign_out(&dir.0).unwrap();
     }
 
     #[test]
