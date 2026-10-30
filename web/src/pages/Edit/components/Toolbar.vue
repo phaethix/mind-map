@@ -77,6 +77,14 @@
           <span class="icon iconfont iconexport"></span>
           <span class="text">{{ $t('toolbar.export') }}</span>
         </div>
+        <div
+          class="toolbarBtn"
+          v-if="isDesktopApp"
+          @click="$bus.$emit('showGithubSync', 'github-push')"
+        >
+          <span class="icon iconfont icongithub"></span>
+          <span class="text">{{ $t('github.short') }}</span>
+        </div>
         <div class="toolbarBtn" @click="$bus.$emit('showMermaid')">
           <span class="icon mermaidIcon">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -269,6 +277,7 @@ export default {
   data() {
     return {
       isMobile: isMobile(),
+      isDesktopApp: isDesktop(),
       horizontalList: [],
       verticalList: [],
       showMoreBtn: true,

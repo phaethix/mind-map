@@ -16,6 +16,7 @@
       <Edit></Edit>
     </template>
     <Updater></Updater>
+    <GithubSync></GithubSync>
   </div>
 </template>
 
@@ -25,6 +26,7 @@ import Edit from './components/Edit.vue'
 import FileHome from './components/FileHome.vue'
 import DesktopHome from './components/DesktopHome.vue'
 import Updater from './components/Updater.vue'
+import GithubSync from './components/GithubSync.vue'
 import { isDesktop } from '@/utils/desktop'
 import { mapState, mapMutations } from 'vuex'
 import { getData, getLocalConfig } from '@/api'
@@ -60,7 +62,8 @@ export default {
     Edit,
     FileHome,
     DesktopHome,
-    Updater
+    Updater,
+    GithubSync
   },
   data() {
     return {
@@ -93,6 +96,20 @@ export default {
     this.$bus.$on('enterEditor', this.enterEditor)
     this.$bus.$on('saveMindMap', this.saveCurrent)
     window.addEventListener('keydown', this.onKeydownSave, true)
+    // 推送到 Gist 时用编辑器里的最新数据，而不是磁盘上可能过期的那一份
+    window.__desktopDocumentData = () => {
+      if (this.screen === 'edit' && this.mindMap) {
+        return this.documentData()
+      }
+      if (
+        this.screen === 'edit' &&
+        window.__desktopSession &&
+        window.__desktopSession.mindMapData
+      ) {
+        return window.__desktopSession.mindMapData
+      }
+      return null
+    }
     this.initLocalConfig()
     this.openDemoOnFirstVisit()
     const loading = this.$loading({
@@ -111,6 +128,9 @@ export default {
     this.$bus.$off('enterEditor', this.enterEditor)
     this.$bus.$off('saveMindMap', this.saveCurrent)
     window.removeEventListener('keydown', this.onKeydownSave, true)
+    if (window.__desktopDocumentData) {
+      delete window.__desktopDocumentData
+    }
   },
   methods: {
     ...mapMutations(['setLocalConfig']),
