@@ -175,6 +175,16 @@
             }
             return
           }
+          if (
+            action === 'github-sign-in' ||
+            action === 'github-push' ||
+            action === 'github-pull'
+          ) {
+            if (window.$bus) {
+              window.$bus.$emit('showGithubSync', action)
+            }
+            return
+          }
           if (action === 'save') {
             await invokeDesktop('save_mind_map', {
               data: window.__desktopSession.mindMapData

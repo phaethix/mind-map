@@ -13,6 +13,8 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
+mod github;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SessionFile {
@@ -1248,6 +1250,9 @@ fn remap_session_paths(state: &AppState, from: &Path, to: &Path) {
         }
         let _ = persist_session(state, &session);
     }
+    if let Some(dir) = github_store_dir(state) {
+        github::remap_links(&dir, from, to);
+    }
 }
 
 fn forget_session_paths(state: &AppState, dir: &Path) {
@@ -1259,6 +1264,9 @@ fn forget_session_paths(state: &AppState, dir: &Path) {
             .recent
             .retain(|item| !PathBuf::from(item).starts_with(dir));
         let _ = persist_session(state, &session);
+    }
+    if let Some(app_dir) = github_store_dir(state) {
+        github::forget_links(&app_dir, dir);
     }
 }
 
@@ -1353,6 +1361,11 @@ fn rename_file(
         }
     }
     persist_session(&state, &session)?;
+    if path != dest_text {
+        if let Some(dir) = github_store_dir(&state) {
+            github::remap_links(&dir, Path::new(&path), Path::new(&dest_text));
+        }
+    }
     set_window_title(&app, &file_name);
     Ok(file_card(&state, &dest))
 }
@@ -1372,7 +1385,11 @@ fn delete_file(state: State<AppState>, path: String) -> Result<(), String> {
     if session.current_path == path {
         session.current_path.clear();
     }
-    persist_session(&state, &session)
+    persist_session(&state, &session)?;
+    if let Some(dir) = github_store_dir(&state) {
+        github::forget_links(&dir, Path::new(&path));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1459,6 +1476,22 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &MenuItem::with_id(app, "rename", "Rename…", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "reveal", reveal_label(), true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(
+                app,
+                "github-sign-in",
+                "Sign in to GitHub…",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app,
+                "github-push",
+                "Push to Secret Gist",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(app, "github-pull", "Pull from Gist…", true, None::<&str>)?,
         ],
     )?;
     let edit_menu = Submenu::with_items(
@@ -1746,6 +1779,146 @@ fn update_progress() -> UpdateProgress {
         .unwrap_or_else(|_| empty_progress())
 }
 
+fn github_app_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    Ok(dir)
+}
+
+fn github_store_dir(state: &AppState) -> Option<PathBuf> {
+    state.session_path.parent().map(Path::to_path_buf)
+}
+
+fn require_sync_path(path: &str) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("请先打开一份导图再同步到 GitHub".to_string());
+    }
+    let file = Path::new(trimmed);
+    if !file.is_file() {
+        return Err("当前导图文件不存在".to_string());
+    }
+    match file.extension().and_then(|ext| ext.to_str()) {
+        Some("xmind") | Some("smm") | Some("json") => Ok(trimmed.to_string()),
+        _ => Err("只能同步 .xmind 导图".to_string()),
+    }
+}
+
+fn document_for_push(path: &str, data: Value) -> Result<Value, String> {
+    if data.is_null() {
+        return read_document(Path::new(path));
+    }
+    if !data.is_object() {
+        return Err("导图数据无效".to_string());
+    }
+    let document = normalize_document(data);
+    if document.get("root").is_none() {
+        return Err("导图数据无效".to_string());
+    }
+    write_document(Path::new(path), &document)?;
+    Ok(document)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GithubPullResult {
+    needs_confirm: bool,
+    gist_id: String,
+    description: String,
+    html_url: String,
+    path: String,
+    file_name: String,
+    session: Option<DesktopSession>,
+}
+
+#[tauri::command]
+fn github_status(app: AppHandle, path: String) -> Result<github::Status, String> {
+    github::status(&github_app_dir(&app)?, path.trim())
+}
+
+#[tauri::command]
+async fn github_auth_start(app: AppHandle) -> Result<github::AuthStart, String> {
+    github::auth_start(&github_app_dir(&app)?).await
+}
+
+#[tauri::command]
+async fn github_auth_poll(app: AppHandle) -> Result<github::AuthPoll, String> {
+    github::auth_poll(&github_app_dir(&app)?).await
+}
+
+#[tauri::command]
+fn github_auth_cancel() -> Result<(), String> {
+    github::auth_cancel();
+    Ok(())
+}
+
+#[tauri::command]
+fn github_sign_out(app: AppHandle) -> Result<(), String> {
+    github::sign_out(&github_app_dir(&app)?)
+}
+
+#[tauri::command]
+fn github_open_url(url: String) -> Result<(), String> {
+    github::allowed_github_url(&url)?;
+    open_external(Path::new(url.trim()))
+}
+
+#[tauri::command]
+async fn github_push(
+    app: AppHandle,
+    path: String,
+    data: Value,
+    format: String,
+) -> Result<github::PushResult, String> {
+    let path = require_sync_path(&path)?;
+    let document = document_for_push(&path, data)?;
+    github::push(&github_app_dir(&app)?, &path, &document, &format).await
+}
+
+#[tauri::command]
+async fn github_pull(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+    gist_id: Option<String>,
+    overwrite: bool,
+) -> Result<GithubPullResult, String> {
+    let app_dir = github_app_dir(&app)?;
+    let docs_dir = state.docs_dir.clone();
+    let fetched = github::fetch_pull(&app_dir, &docs_dir, path.trim(), gist_id).await?;
+    if fetched.target_exists && !overwrite {
+        return Ok(GithubPullResult {
+            needs_confirm: true,
+            gist_id: fetched.gist_id,
+            description: fetched.description,
+            html_url: fetched.html_url,
+            path: fetched.target.to_string_lossy().into_owned(),
+            file_name: display_name(&fetched.target),
+            session: None,
+        });
+    }
+    write_document(&fetched.target, &fetched.document)?;
+    github::save_link(&app_dir, &fetched)?;
+    let session = switch_to(&state, &app, fetched.target.clone())?;
+    Ok(GithubPullResult {
+        needs_confirm: false,
+        gist_id: fetched.gist_id,
+        description: fetched.description,
+        html_url: fetched.html_url,
+        path: fetched.target.to_string_lossy().into_owned(),
+        file_name: display_name(&fetched.target),
+        session: Some(session),
+    })
+}
+
+#[tauri::command]
+async fn github_list_gists(app: AppHandle) -> Result<Vec<github::GistSummary>, String> {
+    github::list_gists(&github_app_dir(&app)?).await
+}
+
 fn dispatch_menu(app: &AppHandle, action: &str) {
     if let Some(window) = app.get_webview_window("main") {
         let script = format!("window.__desktopOnMenu && window.__desktopOnMenu({action:?})");
@@ -1835,6 +2008,15 @@ pub fn run() {
             ai_config_status,
             reveal_ai_config,
             ai_complete,
+            github_status,
+            github_auth_start,
+            github_auth_poll,
+            github_auth_cancel,
+            github_sign_out,
+            github_open_url,
+            github_push,
+            github_pull,
+            github_list_gists,
             desktop_version,
             check_update,
             install_update,

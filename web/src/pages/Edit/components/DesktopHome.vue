@@ -48,6 +48,10 @@
       </div>
 
       <div class="spacer"></div>
+      <button type="button" class="navItem subtle" @click="openGithub">
+        <span class="icon iconfont icongithub"></span>
+        <span class="label">{{ githubLabel }}</span>
+      </button>
       <button type="button" class="navItem subtle" @click="reveal">
         <span class="icon iconfont icondakai"></span>
         {{ $t('home.reveal') }}
@@ -325,6 +329,7 @@ export default {
       searchTimer: null,
       rootPath: '',
       version: '',
+      githubStatus: null,
       draggingPath: '',
       dragOverPath: '',
       pointerDrag: null,
@@ -370,6 +375,14 @@ export default {
       return !this.visibleFolders.length && !this.visibleFiles.length
     },
 
+    githubLabel() {
+      const status = this.githubStatus
+      if (status && status.signedIn && status.login) {
+        return this.$t('github.statusOn', { login: status.login })
+      }
+      return this.$t('github.statusOff')
+    },
+
     canMoveHere() {
       // movePath 为空说明目录没加载成功，此时不能落点，否则会被当成根目录
       return Boolean(
@@ -382,6 +395,8 @@ export default {
   },
   created() {
     this.reload()
+    this.loadGithub()
+    this.$bus.$on('githubSyncChanged', this.loadGithub)
     // macOS 的版本号和更新入口都在应用菜单里，界面不再重复
     if (!isMac()) {
       invoke('desktop_version')
@@ -401,6 +416,7 @@ export default {
   },
   beforeUnmount() {
     clearTimeout(this.searchTimer)
+    this.$bus.$off('githubSyncChanged', this.loadGithub)
     window.removeEventListener('mousemove', this.onPointerMove)
     window.removeEventListener('mouseup', this.onPointerUp)
     window.removeEventListener('blur', this.cancelPointerDrag)
@@ -820,6 +836,19 @@ export default {
 
     reveal() {
       invoke('reveal_documents').catch(error => this.notify(error))
+    },
+
+    openGithub() {
+      this.$bus.$emit('showGithubSync', 'github-sign-in')
+    },
+
+    async loadGithub() {
+      try {
+        this.githubStatus = await invoke('github_status', { path: '' })
+      } catch (error) {
+        console.log(error)
+        this.githubStatus = null
+      }
     },
 
     notify(error) {
