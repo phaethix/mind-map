@@ -310,6 +310,7 @@
 <script>
 import { mapState } from 'vuex'
 import { isMac, invoke } from '@/utils/desktop'
+import { githubSidebarLabel } from '@/utils/githubStatus'
 
 // 桌面端首页：直接以磁盘目录为结构，不维护额外索引
 export default {
@@ -376,11 +377,10 @@ export default {
     },
 
     githubLabel() {
-      const status = this.githubStatus
-      if (status && status.signedIn && status.login) {
-        return this.$t('github.statusOn', { login: status.login })
-      }
-      return this.$t('github.statusOff')
+      const label = githubSidebarLabel(this.githubStatus)
+      return label.params
+        ? this.$t(label.key, label.params)
+        : this.$t(label.key)
     },
 
     canMoveHere() {

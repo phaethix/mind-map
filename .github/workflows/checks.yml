@@ -140,12 +140,13 @@ jobs:
         working-directory: web
         run: bun install --frozen-lockfile
 
-      # 这三个是无框架的断言脚本，之前只在本地手动跑，CI 从来没执行过。
+      # 这些是无框架的断言脚本，之前只在本地手动跑，CI 从来没执行过。
       # 放在构建之前：逻辑错误比打包错误更值得先失败。
       - name: Test
         run: |
           bun web/src/utils/fileLibrary.test.cjs
           bun web/src/utils/mermaidMindmap.test.cjs
+          bun web/src/utils/githubStatus.test.cjs
           bun simple-mind-map/test/xmind-associative-line.test.cjs
 
       - name: Build web app
