@@ -93,6 +93,8 @@ pub(crate) struct FetchedPull {
 enum GistFormat {
     Json,
     Markdown,
+    // Mermaid 也落在 .mind.md 里：GitHub 的 Markdown 渲染器会把 ```mermaid 块画成图
+    Mermaid,
 }
 
 impl GistFormat {
@@ -100,13 +102,14 @@ impl GistFormat {
         match self {
             Self::Json => "json",
             Self::Markdown => "markdown",
+            Self::Mermaid => "mermaid",
         }
     }
 
     fn suffix(self) -> &'static str {
         match self {
             Self::Json => ".mind.json",
-            Self::Markdown => ".mind.md",
+            Self::Markdown | Self::Mermaid => ".mind.md",
         }
     }
 }
@@ -399,6 +402,7 @@ fn parse_format(format: &str) -> Result<GistFormat, String> {
     match format {
         "json" => Ok(GistFormat::Json),
         "markdown" | "md" => Ok(GistFormat::Markdown),
+        "mermaid" | "mmd" => Ok(GistFormat::Mermaid),
         _ => Err("同步格式无效".to_string()),
     }
 }
@@ -658,6 +662,242 @@ fn wrap_document(root: Value) -> Value {
     })
 }
 
+// ---- 拉取：把 Mermaid 思维导图还原成项目自己的文档结构 ----
+
+struct MermaidItem {
+    indent: usize,
+    text: String,
+}
+
+fn is_mermaid_mindmap(content: &str) -> bool {
+    mermaid_body(content).is_some()
+}
+
+// 优先取 ```mermaid 围栏里的内容；没有围栏时按裸 mindmap 片段处理
+fn mermaid_body(content: &str) -> Option<String> {
+    let lowered = content.to_ascii_lowercase();
+    if let Some(start) = lowered.find("```mermaid") {
+        let rest = &content[start + "```mermaid".len()..];
+        let end = rest.find("```").unwrap_or(rest.len());
+        let body = rest[..end].trim();
+        if body.to_ascii_lowercase().contains("mindmap") {
+            return Some(body.to_string());
+        }
+    }
+    let mut lines: Vec<&str> = Vec::new();
+    let mut started = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if !started {
+            if is_mermaid_header(trimmed) {
+                started = true;
+                lines.push(trimmed);
+            }
+            continue;
+        }
+        if trimmed.starts_with("```") {
+            break;
+        }
+        lines.push(line);
+    }
+    if lines.len() > 1 {
+        Some(lines.join("\n"))
+    } else {
+        None
+    }
+}
+
+fn is_mermaid_header(line: &str) -> bool {
+    line == "mindmap" || line.starts_with("mindmap ")
+}
+
+fn parse_mermaid(source: &str) -> Result<Value, String> {
+    let body = mermaid_body(source).ok_or("无法从 Gist 解析导图")?;
+    let mut items: Vec<MermaidItem> = Vec::new();
+    for (index, line) in body.lines().enumerate() {
+        let trimmed = line.trim();
+        if index == 0 && is_mermaid_header(trimmed) {
+            continue;
+        }
+        // %% 注释、::icon(...) 图标、::: 样式类都不是节点，直接跳过
+        if trimmed.is_empty() || trimmed.starts_with("%%") || trimmed.starts_with("::") {
+            continue;
+        }
+        let text = mermaid_node_text(trimmed);
+        if text.is_empty() {
+            continue;
+        }
+        items.push(MermaidItem {
+            indent: mermaid_indent(line),
+            text,
+        });
+    }
+    if items.is_empty() {
+        return Err("Gist 里的思维导图是空的".to_string());
+    }
+    let root_indent = items[0].indent;
+    let root_text = items[0].text.clone();
+    let mut index = 1;
+    let children = build_mermaid_level(&items, &mut index, root_indent);
+    Ok(wrap_document(json!({
+        "data": { "text": root_text },
+        "children": children
+    })))
+}
+
+fn build_mermaid_level(
+    items: &[MermaidItem],
+    index: &mut usize,
+    parent_indent: usize,
+) -> Vec<Value> {
+    let mut children = Vec::new();
+    while *index < items.len() && items[*index].indent > parent_indent {
+        let indent = items[*index].indent;
+        let text = items[*index].text.clone();
+        *index += 1;
+        let kids = build_mermaid_level(items, index, indent);
+        children.push(json!({
+            "data": { "text": text },
+            "children": kids
+        }));
+    }
+    children
+}
+
+// Mermaid 用缩进表达层级，Tab 按两个空格算
+fn mermaid_indent(line: &str) -> usize {
+    let mut width = 0;
+    for ch in line.chars() {
+        match ch {
+            ' ' => width += 1,
+            '\t' => width += 2,
+            _ => break,
+        }
+    }
+    width
+}
+
+fn mermaid_node_text(token: &str) -> String {
+    let value = strip_mermaid_icon(token);
+    let value = strip_mermaid_id(&value);
+    let value = unwrap_mermaid_shape(&value);
+    let value = unquote_mermaid(&value);
+    let value = decode_mermaid_entities(&value);
+    let value = br_to_newline(&value);
+    value
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+fn strip_mermaid_icon(value: &str) -> String {
+    let mut out = String::new();
+    let mut rest = value;
+    while let Some(start) = rest.find("::icon(") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + "::icon(".len()..];
+        match after.find(')') {
+            Some(end) => rest = &after[end + 1..],
+            None => {
+                rest = "";
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+// 节点可能写成 foo[文字]，前面的 id 不属于文字
+fn strip_mermaid_id(value: &str) -> String {
+    let trimmed = value.trim_start();
+    let mut end = 0;
+    for (index, ch) in trimmed.char_indices() {
+        if ch.is_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+            end = index + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    if end == 0 {
+        return trimmed.to_string();
+    }
+    let rest = trimmed[end..].trim_start();
+    match rest.chars().next() {
+        Some('[') | Some('(') | Some('{') => rest.to_string(),
+        _ => trimmed.to_string(),
+    }
+}
+
+fn unwrap_mermaid_shape(value: &str) -> String {
+    let trimmed = value.trim();
+    let text = trimmed;
+    let pairs: [(&str, &str); 7] = [
+        ("))", "(("),
+        (")", "("),
+        ("((", "))"),
+        ("(", ")"),
+        ("[", "]"),
+        ("{{", "}}"),
+        ("{", "}"),
+    ];
+    for (open, close) in pairs {
+        if text.len() >= open.len() + close.len() && text.starts_with(open) && text.ends_with(close)
+        {
+            return text[open.len()..text.len() - close.len()]
+                .trim()
+                .to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+fn unquote_mermaid(value: &str) -> String {
+    let trimmed = value.trim();
+    for quote in ['"', '\''] {
+        if trimmed.len() >= 2 && trimmed.starts_with(quote) && trimmed.ends_with(quote) {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            return inner
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+// 渲染端把引号和 & 写成了 HTML 实体，读回来要还原（&amp; 必须最后处理，否则会二次解码）
+fn decode_mermaid_entities(value: &str) -> String {
+    value
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&nbsp;", " ")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+}
+
+fn br_to_newline(value: &str) -> String {
+    let lowered = value.to_ascii_lowercase();
+    let mut out = String::new();
+    let mut index = 0;
+    while index < value.len() {
+        if lowered[index..].starts_with("<br") {
+            if let Some(close) = lowered[index..].find('>') {
+                out.push('\n');
+                index += close + 1;
+                continue;
+            }
+        }
+        let ch = value[index..].chars().next().unwrap_or(' ');
+        out.push(ch);
+        index += ch.len_utf8();
+    }
+    out
+}
+
 fn normalize_gist_document(value: Value) -> Result<Value, String> {
     if !value.is_object() {
         return Err("无法解析 Gist 里的导图".to_string());
@@ -680,6 +920,10 @@ fn parse_named_content(name: &str, content: &str) -> Result<Value, String> {
         let value: Value =
             serde_json::from_str(trimmed).map_err(|_| "无法解析 Gist 里的导图 JSON".to_string())?;
         return normalize_gist_document(value);
+    }
+    // 同一个 .mind.md 里可能放 Mermaid，也可能放老的大纲，按内容自动分流
+    if is_mermaid_mindmap(content) {
+        return parse_mermaid(content);
     }
     parse_markdown(content)
 }
@@ -716,9 +960,58 @@ fn render_document(document: &Value, format: GistFormat) -> Result<String, Strin
     let content = match format {
         GistFormat::Json => render_json(document)?,
         GistFormat::Markdown => render_markdown(document)?,
+        GistFormat::Mermaid => render_mermaid(document)?,
     };
     ensure_gist_size(&content)?;
     Ok(content)
+}
+
+// Mermaid 思维导图：GitHub 的 Markdown 渲染器原生支持，Gist 页面直接画出来。
+// 只能承载文字和层级，备注、图片、样式都不会带过去，要完整备份请用 JSON。
+fn render_mermaid(document: &Value) -> Result<String, String> {
+    let root = document.get("root").ok_or("导图数据无效")?;
+    let mut out = String::from("```mermaid\nmindmap\n");
+    write_mermaid(root, 0, &mut out)?;
+    out.push_str("```\n");
+    Ok(out)
+}
+
+fn write_mermaid(node: &Value, depth: usize, out: &mut String) -> Result<(), String> {
+    if depth > 64 {
+        return Err("导图层级过深，无法导出为 Mermaid".to_string());
+    }
+    let data = node.get("data").cloned().unwrap_or_else(|| json!({}));
+    let text = plain_text(data.get("text").unwrap_or(&Value::Null));
+    for _ in 0..(depth + 1) {
+        out.push_str("  ");
+    }
+    out.push_str(&mermaid_label(&text, depth == 0));
+    out.push('\n');
+    if let Some(children) = node.get("children").and_then(|value| value.as_array()) {
+        for child in children {
+            write_mermaid(child, depth + 1, out)?;
+        }
+    }
+    Ok(())
+}
+
+// 引号只能用 HTML 实体表达：方括号形式里的 \" 会让 Mermaid 解析器报错。
+// 括号类字符会被当成语法，必须套一层 ["..."]，其余情况保持裸文本最易读。
+fn mermaid_label(text: &str, root: bool) -> String {
+    let body = if text.trim().is_empty() {
+        " ".to_string()
+    } else {
+        text.replace('&', "&amp;").replace('"', "&quot;")
+    };
+    let hazard = body
+        .chars()
+        .any(|ch| matches!(ch, '(' | ')' | '[' | ']' | '{' | '}' | '`'));
+    match (root, hazard) {
+        (true, true) => format!("((\"{body}\"))"),
+        (true, false) => format!("(({body}))"),
+        (false, true) => format!("[\"{body}\"]"),
+        (false, false) => body,
+    }
 }
 
 fn create_body(description: &str, file_name: &str, content: &str) -> Value {
@@ -746,11 +1039,14 @@ fn update_body(description: &str, previous: &[String], file_name: &str, content:
     })
 }
 
-fn format_from_name(name: &str) -> &'static str {
-    if name.ends_with(".mind.md") {
-        "markdown"
-    } else {
+// 后缀分不出 Mermaid 和大纲（都是 .mind.md），只能看内容
+fn gist_content_format(name: &str, content: &str) -> &'static str {
+    if name.ends_with(".mind.json") {
         "json"
+    } else if is_mermaid_mindmap(content) {
+        "mermaid"
+    } else {
+        "markdown"
     }
 }
 
@@ -1632,13 +1928,14 @@ async fn fetch_pull_with(
     let client = http_client()?;
     let gist = finish(app_dir, get_gist(&client, api_root, &token, &gist_id).await)?;
     let file_name = preferred_file_name(&gist.files).ok_or("无法从 Gist 解析导图")?;
-    let format = format_from_name(&file_name).to_string();
     let file = gist
         .files
         .get(&file_name)
         .cloned()
         .ok_or("无法从 Gist 解析导图")?;
     let content = finish(app_dir, file_text(&client, &token, &file).await)?;
+    // 格式看内容而不是看后缀：.mind.md 里既可能是 Mermaid，也可能是老的 Markdown 大纲
+    let format = gist_content_format(&file_name, &content).to_string();
     let document = parse_named_content(&file_name, &content)?;
     let stem = stem_from_gist(&gist.description, &file_name);
     let target = pull_target(docs_dir, &gist.id, &stem, &sync);
@@ -2469,5 +2766,79 @@ mod tests {
         assert_eq!(error, "GitHub 登录已失效，请重新登录");
         assert!(!error.contains("gho_test_token"));
         assert!(read_auth(&dir.0).unwrap().access_token.is_empty());
+    }
+
+    #[test]
+    fn mermaid_roundtrip_keeps_text_and_hierarchy() {
+        let document = json!({
+            "root": {
+                "data": { "text": "中心主题" },
+                "children": [
+                    {
+                        "data": { "text": "分支一" },
+                        "children": [{ "data": { "text": "叶子" }, "children": [] }]
+                    },
+                    { "data": { "text": "分支二" }, "children": [] }
+                ]
+            }
+        });
+        let rendered = render_mermaid(&document).unwrap();
+        assert!(rendered.starts_with("```mermaid\nmindmap\n"));
+        assert!(rendered.contains("\n  ((中心主题))\n"));
+        assert!(rendered.contains("\n    分支一\n"));
+        assert!(rendered.contains("\n      叶子\n"));
+        assert!(rendered.ends_with("```\n"));
+
+        let parsed = parse_mermaid(&rendered).unwrap();
+        assert_eq!(parsed["layout"], "logicalStructure");
+        let root = &parsed["root"];
+        assert_eq!(root["data"]["text"], "中心主题");
+        assert_eq!(root["children"][0]["data"]["text"], "分支一");
+        assert_eq!(root["children"][0]["children"][0]["data"]["text"], "叶子");
+        assert_eq!(root["children"][1]["data"]["text"], "分支二");
+    }
+
+    #[test]
+    fn mermaid_quotes_text_that_would_break_the_syntax() {
+        let document = json!({
+            "root": {
+                "data": { "text": "计划 (2026)" },
+                "children": [{ "data": { "text": "a[1] \"x\"" }, "children": [] }]
+            }
+        });
+        let rendered = render_mermaid(&document).unwrap();
+        assert!(rendered.contains("((\"计划 (2026)\"))"));
+        // 子节点带括号时套方括号，引号写成实体，避免 Mermaid 解析器把语法吃掉
+        assert!(rendered.contains("\n    [\"a[1] &quot;x&quot;\"]\n"));
+        let parsed = parse_mermaid(&rendered).unwrap();
+        assert_eq!(parsed["root"]["data"]["text"], "计划 (2026)");
+        assert_eq!(parsed["root"]["children"][0]["data"]["text"], "a[1] \"x\"");
+        let plain = parse_mermaid("mindmap\n  root\n    普通节点\n").unwrap();
+        assert_eq!(plain["root"]["children"][0]["data"]["text"], "普通节点");
+    }
+
+    #[test]
+    fn mermaid_pull_reads_ids_shapes_icons_and_line_breaks() {
+        let source = "```mermaid\nmindmap\n  root((中心))\n    node1[带 id 的节点]\n      ::icon(fa fa-book)\n    (圆角)\n      A[a <br/>b]\n```\n";
+        let parsed = parse_mermaid(source).unwrap();
+        let root = &parsed["root"];
+        assert_eq!(root["data"]["text"], "中心");
+        assert_eq!(root["children"][0]["data"]["text"], "带 id 的节点");
+        assert_eq!(root["children"][0]["children"].as_array().unwrap().len(), 0);
+        assert_eq!(root["children"][1]["data"]["text"], "圆角");
+        assert_eq!(root["children"][1]["children"][0]["data"]["text"], "a\nb");
+    }
+
+    #[test]
+    fn gist_format_follows_content_not_suffix() {
+        let mermaid = "```mermaid\nmindmap\n  root((A))\n```\n";
+        assert_eq!(gist_content_format("Map.mind.md", mermaid), "mermaid");
+        assert_eq!(
+            gist_content_format("Map.mind.md", "# A\n\n## B\n"),
+            "markdown"
+        );
+        assert_eq!(gist_content_format("Map.mind.json", "{}"), "json");
+        assert!(parse_named_content("Map.mind.md", mermaid).is_ok());
+        assert!(parse_named_content("Map.mind.md", "# A\n\n## B\n").is_ok());
     }
 }

@@ -70,8 +70,8 @@
           <el-button type="primary" :disabled="busy" @click="push('json')">{{
             $t('github.pushJson')
           }}</el-button>
-          <el-button :disabled="busy" @click="push('markdown')">{{
-            $t('github.pushMarkdown')
+          <el-button :disabled="busy" @click="push('mermaid')">{{
+            $t('github.pushMermaid')
           }}</el-button>
           <el-button
             v-if="status.linked"

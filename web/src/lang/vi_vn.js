@@ -632,9 +632,9 @@ export default {
     configPath: 'Tệp cấu hình đã đọc: {path} — không có clientId dùng được',
     configMissing: 'Không tìm thấy {path}. Hãy tạo tệp này và điền clientId.',
     pushJson: 'Đẩy JSON',
-    pushMarkdown: 'Đẩy Markdown',
+    pushMermaid: 'Đẩy Mermaid',
     pushHint:
-      'JSON giữ nguyên sơ đồ. Markdown chỉ là dàn ý để đọc, không có bố cục, chủ đề và hầu hết kiểu dáng.',
+      'JSON giữ nguyên sơ đồ. Mermaid hiển thị trực tiếp thành sơ đồ trong Gist nhưng chỉ giữ chữ và thứ bậc, không có ghi chú, hình ảnh và kiểu dáng.',
     pullLinked: 'Kéo Gist đã liên kết',
     choose: 'Chọn từ danh sách Gist',
     refresh: 'Làm mới',

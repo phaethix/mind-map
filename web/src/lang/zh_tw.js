@@ -614,9 +614,9 @@ export default {
     configPath: '讀取的設定檔：{path}，裡面沒有可用的 clientId',
     configMissing: '找不到 {path}，請新建該檔案並填寫 clientId',
     pushJson: '推送 JSON',
-    pushMarkdown: '推送 Markdown',
+    pushMermaid: '推送 Mermaid',
     pushHint:
-      'JSON 會保留整份導圖。Markdown 只是可讀的大綱，不含版面、主題和大部分樣式。',
+      'JSON 會保留整份導圖。Mermaid 能在 Gist 頁面直接算成思維導圖，但只帶文字和層級，不含備註、圖片和樣式。',
     pullLinked: '拉取已關聯的 Gist',
     choose: '從 Gist 清單選擇',
     refresh: '重新整理清單',

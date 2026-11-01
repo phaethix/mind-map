@@ -68,37 +68,9 @@ AI generation reads `baseUrl`, `model` and `apiKey` from `ai.json` in the app co
 
 ## Optional GitHub sync
 
-The desktop app can push the open map to a **secret GitHub Gist**. This is off until you sign in and choose Push. A fresh install, and the browser build, stay local-only: nothing is uploaded in the background, and `~/Documents/Mind` remains the source of truth.
+The desktop app can push the open map to a **secret GitHub Gist** and pull it back, either as `.mind.json` (lossless) or as a Mermaid diagram GitHub renders inline. Sign-in uses GitHub's OAuth **Device Flow**, and nothing is uploaded until you press Push.
 
-Sync uses GitHub's OAuth **Device Flow** (`gist` and `read:user`). The app embeds or reads a public **Client ID** only. There is no `client_secret` in the client. The access token is stored next to `ai.json` in `github.json` (mode `0600` on Unix). Sign out deletes that token.
-
-Push writes the open map as JSON (the full document) or, if you choose it, Markdown (an outline). The file is text, not a `.xmind` zip. GitHub Gists are about **1 MB**; a larger map is refused with an error instead of being truncated. Pull asks before it replaces a local file. Gists created here are secret: they are not listed on your profile, but anyone with the link can open them.
-
-| System  | Config folder                                         |
-| ------- | ----------------------------------------------------- |
-| macOS   | `~/Library/Application Support/com.huanyuli.mindmap/` |
-| Linux   | `~/.local/share/com.huanyuli.mindmap/`                |
-| Windows | `%APPDATA%\com.huanyuli.mindmap\`                     |
-
-### Configure the OAuth App
-
-These steps are for the maintainer. They are not done by the app.
-
-1. Create an OAuth App at <https://github.com/settings/developers>.
-2. Homepage URL can be this repository. The form requires an authorization callback URL; Device Flow does not use it. `http://127.0.0.1` is enough.
-3. On the app's settings page, enable **Device Flow**.
-4. Copy the **Client ID**. Do not generate a client secret for this flow. If GitHub shows one, do not put it in the app, the repo, or CI.
-5. Provide the Client ID in one of these ways, with no production placeholder checked in:
-   - Runtime or compile time: `MIND_GITHUB_CLIENT_ID=YOUR_CLIENT_ID`. `make dev` and `make desktop` both see it. A value set while compiling the desktop crate is embedded with `option_env!`; a value set when the app starts overrides it.
-   - Or set `clientId` in `github.json` in the config folder above. Leave `accessToken` empty; the sign-in flow fills it in.
-
-```bash
-MIND_GITHUB_CLIENT_ID=YOUR_CLIENT_ID make dev
-```
-
-### Developer Program
-
-To apply for the GitHub Developer Program, use <https://github.com/developer/register> with this integration (Gists API via OAuth Device Flow) and a support email you monitor. A development build is enough to apply. This repository does not publish a support address.
+Formats, the OAuth app setup and the config folder are covered in [docs/github-sync.md](docs/github-sync.md).
 
 ## Contributing
 

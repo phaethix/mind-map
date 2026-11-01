@@ -634,9 +634,9 @@ export default {
     configPath: 'Config file read: {path} — it has no usable clientId',
     configMissing: 'Config file not found: {path}. Create it with a clientId.',
     pushJson: 'Push JSON',
-    pushMarkdown: 'Push Markdown',
+    pushMermaid: 'Push Mermaid',
     pushHint:
-      'JSON keeps the full map. Markdown is a readable outline and drops layout, theme and most styling.',
+      'JSON keeps the full map. Mermaid renders as a mind map right in the Gist, but keeps only text and hierarchy — no notes, images or styling.',
     pullLinked: 'Pull linked Gist',
     choose: 'Choose a Gist',
     refresh: 'Refresh',
