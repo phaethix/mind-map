@@ -1,43 +1,43 @@
-# Mermaid 在线编辑
+# Mermaid editor
 
-## 目标
+## Goals
 
-工具栏增加 Mermaid。打开后是一个左右分栏的编辑器：左边写 Mermaid `mindmap` 文本，右边按 Markdown 里的 Mermaid 思维导图样式实时预览。确认后才写回主画布。
+A Mermaid entry in the toolbar. It opens a split editor: Mermaid `mindmap` text on the left, a live preview on the right rendered the way a Mermaid mind map looks inside Markdown. Nothing reaches the canvas until you confirm.
 
-AI 根据一段说明生成 Mermaid 文本，生成结果进入编辑器，不直接改画布。
+AI turns a prompt into Mermaid text, and the result lands in the editor instead of changing the canvas directly.
 
-## 编辑器
+## Editor
 
-窗口约占屏幕 90%，白底、16px 圆角，和现有工具栏同一套视觉。主按钮用脑图经典7 的红色 `#e25a40`。
+The window takes about 90% of the screen: white, 16px corners, the same look as the rest of the toolbar. The primary button uses the Mind Classic 7 red `#e25a40`.
 
-- 打开时把当前导图转成 Mermaid，编辑器和预览立即有内容。
-- 输入停顿约 200ms 后重新渲染。解析失败时保留上一帧预览，并在编辑器下方显示错误。
-- 预览用 Mermaid 渲染 `mindmap`，是放射状、按分支着色的图，和 Markdown 里的效果一致。
-- 「应用到导图」把节点写回主画布，并保留预览里的颜色、圆角、根节点圆形和位置。
-- 「复制」复制编辑器文本。「下载」保存为 `.mmd`。「打开文件」把 `.mmd` 读进编辑器。
+- Opening it converts the current map to Mermaid, so both panes have content immediately.
+- Typing re-renders after roughly 200ms. A parse failure keeps the last good frame and shows the error below the editor.
+- The preview renders `mindmap` with Mermaid: radial, coloured per branch, matching what Markdown shows.
+- "Apply" writes the nodes back to the canvas and keeps the colours, corner radius, round root and positions from the preview.
+- "Copy" copies the editor text. "Download" saves a `.mmd`. "Open file" reads a `.mmd` into the editor.
 
-只支持 Mermaid 的 `mindmap` 树。节点文字保留，形状标记如 `((文本))` 在导入时去掉，只留文字。关联线、图片、节点样式不进入 Mermaid。
+Only Mermaid `mindmap` trees are supported. Node text survives; shape markers such as `((text))` are stripped on import. Associative lines, images and node styling do not travel through Mermaid.
 
 ## AI
 
-编辑器底部有一条输入框和「生成」按钮。模型必须只返回一个 `mindmap` 代码块。返回后填入编辑器并刷新预览。
+A prompt field and a "Generate" button sit at the bottom of the editor. The model must return exactly one `mindmap` code block; the reply is written into the editor and the preview refreshes.
 
-接口是 OpenAI 兼容的 `POST {baseUrl}/chat/completions`，字段为 `baseUrl`、`model`、`apiKey`。
+The endpoint is an OpenAI-compatible `POST {baseUrl}/chat/completions` with `baseUrl`, `model` and `apiKey`.
 
-### Mac 客户端
+### Mac client
 
-密钥放在应用数据目录的 `ai.json`，与现有 `session.json` 同级，不放进仓库。页面只知道是否已配置、Base URL 和模型名，看不到密钥。请求由 Tauri 发出。
+The key lives in `ai.json` in the app data folder, next to `session.json`, and never enters the repository. The page only knows whether a key is configured, plus the base URL and model name; Tauri sends the request.
 
-界面状态为「密钥来自本机配置」，并提供在 Finder 中打开该文件。文件不存在时创建模板。
+The UI reports "key from the local config" and offers to reveal that file in Finder. A missing file gets a template.
 
 ### GitHub Pages
 
-没有服务器。用户在编辑器里打开设置，填写 Base URL、模型和 API Key。这三项只写入浏览器 `localStorage`，请求从浏览器直接发到模型服务。
+There is no server. The user opens settings in the editor and fills in the base URL, model and API key. Those three go into browser `localStorage` only, and requests go straight from the browser to the model service.
 
-界面状态为「密钥只保存在这台浏览器」。未配置时，点「生成」先打开设置。
+The UI reports "key kept in this browser only". When nothing is configured, "Generate" opens settings first.
 
-浏览器会被部分接口的跨域策略拦住。失败时说明：这个接口不允许网页直接访问，Mac 客户端没有这个限制。不使用会看到密钥的中转代理。
+Some endpoints are blocked by CORS. The failure message says the browser is not allowed to call that endpoint and that the Mac client has no such limit. No relay that would get to see the key.
 
-## 不做
+## Not in scope
 
-不改现有的火山方舟 AI 对话。不支持 flowchart 等其他 Mermaid 图。不把密钥写进仓库 `.env`。
+No changes to the existing Volcano Engine Ark chat. No other Mermaid diagram types such as flowchart. No keys in a repository `.env`.
