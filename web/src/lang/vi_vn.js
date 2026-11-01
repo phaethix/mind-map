@@ -625,10 +625,12 @@ export default {
     signIn: 'Đăng nhập GitHub',
     signOut: 'Đăng xuất',
     signedOut: 'Chưa đăng nhập',
-    signedIn: 'Đã đăng nhập @{login}',
+    signedIn: "Đã đăng nhập {'@'}{login}",
     signedInUnknown: 'Đã đăng nhập GitHub',
     notConfigured:
       'Bản cài này chưa có Client ID của OAuth GitHub nên đồng bộ vẫn tắt. Hãy đặt MIND_GITHUB_CLIENT_ID, hoặc điền clientId trong github.json (cùng thư mục với ai.json). Không điền client secret.',
+    configPath: 'Tệp cấu hình đã đọc: {path} — không có clientId dùng được',
+    configMissing: 'Không tìm thấy {path}. Hãy tạo tệp này và điền clientId.',
     pushJson: 'Đẩy JSON',
     pushMarkdown: 'Đẩy Markdown',
     pushHint:
@@ -668,7 +670,7 @@ export default {
     updated: 'Đã cập nhật Gist bí mật',
     recreated: 'Gist cũ không còn, đã tạo một Gist bí mật mới',
     statusOff: 'GitHub chưa đăng nhập',
-    statusOn: 'GitHub · @{login}',
+    statusOn: "GitHub · {'@'}{login}",
     noLink: 'Sơ đồ hiện tại chưa có Gist liên kết'
   }
 }

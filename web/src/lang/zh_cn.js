@@ -607,10 +607,12 @@ export default {
     signIn: '登录 GitHub',
     signOut: '退出登录',
     signedOut: '尚未登录',
-    signedIn: '已登录为 @{login}',
+    signedIn: "已登录为 {'@'}{login}",
     signedInUnknown: '已登录 GitHub',
     notConfigured:
       '这个安装包还没有填入 GitHub OAuth 的 Client ID，所以同步保持关闭。请设置 MIND_GITHUB_CLIENT_ID，或在与 ai.json 同目录的 github.json 里填写 clientId。不要填写 client secret。',
+    configPath: '读取的配置文件：{path}，里面没有可用的 clientId',
+    configMissing: '找不到 {path}，请新建该文件并填写 clientId',
     pushJson: '推送 JSON',
     pushMarkdown: '推送 Markdown',
     pushHint:
@@ -649,7 +651,7 @@ export default {
     updated: '已更新私密 Gist',
     recreated: '原来的 Gist 不存在，已新建一个私密 Gist',
     statusOff: 'GitHub 未登录',
-    statusOn: 'GitHub · @{login}',
+    statusOn: "GitHub · {'@'}{login}",
     noLink: '当前导图没有关联的 Gist'
   }
 }

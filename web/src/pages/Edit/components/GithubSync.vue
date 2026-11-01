@@ -8,7 +8,26 @@
   >
     <div class="githubSync" :class="{ isDark: isDark }">
       <p class="privacy">{{ $t('github.privacy') }}</p>
-      <p class="status">{{ statusText }}</p>
+      <p class="status">
+        <img
+          v-if="status.signedIn && status.avatarUrl"
+          class="avatar"
+          :src="status.avatarUrl"
+          alt=""
+        />
+        <span>{{ statusText }}</span>
+      </p>
+      <!-- 没配置时把实际查找的路径摆出来，否则用户只能靠猜 -->
+      <p
+        class="hint"
+        v-if="!status.configured && !statusError && status.configPath"
+      >
+        {{
+          status.configExists
+            ? $t('github.configPath', { path: status.configPath })
+            : $t('github.configMissing', { path: status.configPath })
+        }}
+      </p>
       <p class="hint" v-if="linkText">{{ linkText }}</p>
 
       <div class="device" v-if="waiting && userCode">
@@ -118,7 +137,8 @@ export default {
       pollTimer: null,
       expiryTimer: null,
       gists: [],
-      status: emptyStatus()
+      status: emptyStatus(),
+      statusError: ''
     }
   },
   computed: {
@@ -126,6 +146,10 @@ export default {
       isDark: state => state.localConfig.isDark
     }),
     statusText() {
+      // 取状态失败时直接暴露原因：以前会被当成「没填 Client ID」，把真问题藏住了
+      if (this.statusError) {
+        return this.statusError
+      }
       if (!this.status.configured) {
         return this.$t('github.notConfigured')
       }
@@ -190,8 +214,12 @@ export default {
         this.status =
           (await invoke('github_status', { path: payload.path || '' })) ||
           emptyStatus()
+        this.statusError = ''
       } catch (error) {
         console.log(error)
+        // 保留失败原因，别让它伪装成「没配置」把登录按钮一起藏掉
+        this.status = emptyStatus()
+        this.statusError = errorText(error) || this.$t('github.failed')
       }
     },
     async startSignIn() {
@@ -229,12 +257,13 @@ export default {
         if (result.status === 'success') {
           this.finishWait()
           await this.refresh()
+          // 先通知侧栏，再弹提示：顺序反过来的话，用户会先看到「成功」再看到旧的「未登录」
+          this.$bus.$emit('githubSyncChanged')
           this.$message.success(
             result.login
               ? this.$t('github.signedIn', { login: result.login })
               : this.$t('github.signedInUnknown')
           )
-          this.$bus.$emit('githubSyncChanged')
           return
         }
         if (result.status === 'cancelled') {
@@ -244,6 +273,10 @@ export default {
         this.schedulePoll((result.intervalSecs || 5) * 1000)
       } catch (error) {
         this.finishWait()
+        // 令牌可能已经写进磁盘（轮询被中断、重复轮询撞在一起都会这样），
+        // 所以报错前必须回读真实状态，否则界面停在「尚未登录」但推送却是通的。
+        await this.refresh()
+        this.$bus.$emit('githubSyncChanged')
         this.$message.error(this.presentError(error))
       }
     },
@@ -448,11 +481,14 @@ function emptyStatus() {
     configured: false,
     signedIn: false,
     login: '',
+    avatarUrl: '',
     linked: false,
     gistId: '',
     htmlUrl: '',
     format: '',
-    fileName: ''
+    fileName: '',
+    configPath: '',
+    configExists: false
   }
 }
 
@@ -488,6 +524,21 @@ function errorText(error) {
 .privacy,
 .status {
   font-size: 13px;
+}
+
+// 状态行里带头像：登录后一眼看出是谁
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
 }
 
 .hint,

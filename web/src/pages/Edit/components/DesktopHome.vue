@@ -51,9 +51,16 @@
         <span class="icon iconfont icondakai"></span>
         {{ $t('home.reveal') }}
       </button>
-      <!-- 只有 GitHub 登录态钉在左下角，和 XMind 一样 -->
+      <!-- 只有 GitHub 登录态钉在左下角，和 XMind 一样；登录后换成头像 -->
       <button type="button" class="navItem subtle pinned" @click="openGithub">
-        <span class="icon iconfont icongithub"></span>
+        <img
+          v-if="githubAvatar"
+          class="avatar"
+          :src="githubAvatar"
+          alt=""
+          draggable="false"
+        />
+        <span v-else class="icon iconfont icongithub"></span>
         <span class="label">{{ githubLabel }}</span>
       </button>
     </aside>
@@ -381,6 +388,12 @@ export default {
       return label.params
         ? this.$t(label.key, label.params)
         : this.$t(label.key)
+    },
+
+    // 只有拿到令牌才显示头像，否则退回 GitHub 图标
+    githubAvatar() {
+      const status = this.githubStatus
+      return status && status.signedIn ? status.avatarUrl || '' : ''
     },
 
     canMoveHere() {

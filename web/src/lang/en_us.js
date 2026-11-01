@@ -627,10 +627,12 @@ export default {
     signIn: 'Sign in to GitHub',
     signOut: 'Sign out',
     signedOut: 'Not signed in',
-    signedIn: 'Signed in as @{login}',
+    signedIn: "Signed in as {'@'}{login}",
     signedInUnknown: 'Signed in to GitHub',
     notConfigured:
       'This build has no GitHub OAuth Client ID, so sync stays off. Set MIND_GITHUB_CLIENT_ID, or clientId in github.json next to ai.json. Do not enter a client secret.',
+    configPath: 'Config file read: {path} — it has no usable clientId',
+    configMissing: 'Config file not found: {path}. Create it with a clientId.',
     pushJson: 'Push JSON',
     pushMarkdown: 'Push Markdown',
     pushHint:
@@ -670,7 +672,7 @@ export default {
     recreated:
       'The previous Gist was missing, so a new secret Gist was created',
     statusOff: 'GitHub: signed out',
-    statusOn: 'GitHub · @{login}',
+    statusOn: "GitHub · {'@'}{login}",
     noLink: 'This map has no linked Gist'
   }
 }

@@ -46,11 +46,15 @@ pub(crate) struct Status {
     pub configured: bool,
     pub signed_in: bool,
     pub login: String,
+    pub avatar_url: String,
     pub linked: bool,
     pub gist_id: String,
     pub html_url: String,
     pub format: String,
     pub file_name: String,
+    // 界面要告诉用户 clientId 到底该写在哪个文件，光说「与 ai.json 同目录」查不出问题
+    pub config_path: String,
+    pub config_exists: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -220,6 +224,9 @@ struct AuthFile {
     access_token: String,
     #[serde(default)]
     login: String,
+    // 头像地址跟着令牌一起存，界面不必再拿令牌去换一次
+    #[serde(default)]
+    avatar_url: String,
     #[serde(default)]
     scope: String,
 }
@@ -270,6 +277,7 @@ fn clear_token_unlocked(app_dir: &Path) -> Result<(), String> {
     let mut auth = read_auth_unlocked(app_dir)?;
     auth.access_token.clear();
     auth.login.clear();
+    auth.avatar_url.clear();
     auth.scope.clear();
     if auth.client_id.trim().is_empty() && !auth_path(app_dir).exists() {
         return Ok(());
@@ -1022,11 +1030,17 @@ async fn request_token(
     })
 }
 
-async fn fetch_login(
+#[derive(Default)]
+struct Profile {
+    login: String,
+    avatar_url: String,
+}
+
+async fn fetch_profile(
     client: &reqwest::Client,
     api_root: &str,
     token: &str,
-) -> Result<String, ApiError> {
+) -> Result<Profile, ApiError> {
     let (status, body) = send(api_builder(
         client,
         reqwest::Method::GET,
@@ -1036,11 +1050,24 @@ async fn fetch_login(
     .await?;
     classify_status(status, &body)?;
     let value: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
-    Ok(value
-        .get("login")
+    let avatar_url = value
+        .get("avatar_url")
         .and_then(|item| item.as_str())
         .unwrap_or("")
-        .to_string())
+        .to_string();
+    Ok(Profile {
+        login: value
+            .get("login")
+            .and_then(|item| item.as_str())
+            .unwrap_or("")
+            .to_string(),
+        // 只接受 https 地址：头像要直接塞进 <img>，别让它成为任意 URL 的入口
+        avatar_url: if avatar_url.starts_with("https://") {
+            avatar_url
+        } else {
+            String::new()
+        },
+    })
 }
 
 struct RemoteGist {
@@ -1293,15 +1320,19 @@ pub(crate) fn status(app_dir: &Path, path: &str) -> Result<Status, String> {
     } else {
         sync.documents.get(path)
     };
+    let config = auth_path(app_dir);
     Ok(Status {
         configured: !client_id.is_empty(),
         signed_in: !auth.access_token.trim().is_empty(),
         login: auth.login,
+        avatar_url: auth.avatar_url,
         linked: link.is_some(),
         gist_id: link.map(|item| item.gist_id.clone()).unwrap_or_default(),
         html_url: link.map(|item| item.html_url.clone()).unwrap_or_default(),
         format: link.map(|item| item.format.clone()).unwrap_or_default(),
         file_name: link.map(|item| item.file_name.clone()).unwrap_or_default(),
+        config_path: config.to_string_lossy().into_owned(),
+        config_exists: config.exists(),
     })
 }
 
@@ -1318,10 +1349,10 @@ async fn auth_start_with(
     let stored = read_auth(app_dir)?.client_id;
     let client_id = configured_client_id(&stored);
     if client_id.is_empty() {
-        return Err(
-            "还没有配置 GitHub OAuth 应用的 Client ID。请设置 MIND_GITHUB_CLIENT_ID，或在 github.json 里填写 clientId。不要填写 client secret。"
-                .to_string(),
-        );
+        return Err(format!(
+            "还没有配置 GitHub OAuth 应用的 Client ID。请在 {} 里填写 clientId，或设置 MIND_GITHUB_CLIENT_ID。不要填写 client secret。",
+            auth_path(app_dir).display()
+        ));
     }
     let client = http_client()?;
     let payload = request_device_code(&client, device_url, &client_id).await?;
@@ -1431,13 +1462,15 @@ pub(crate) async fn auth_poll(app_dir: &Path) -> Result<AuthPoll, String> {
             access_token,
             scope,
         }) => {
-            let login = match fetch_login(&client, &api_root, &access_token).await {
-                Ok(login) => login,
+            // 资料拿不到也要把令牌留下：推送本身只需要令牌，用户名和头像只是展示用
+            let profile = match fetch_profile(&client, &api_root, &access_token).await {
+                Ok(profile) => profile,
                 Err(ApiError::Unauthorized) => {
                     return finish(app_dir, Err(ApiError::Unauthorized));
                 }
-                Err(_) => String::new(),
+                Err(_) => Profile::default(),
             };
+            let login = profile.login.clone();
             let mut gate = lock_gate()?;
             if gate.pending.as_ref().map(|item| item.generation) != Some(generation) {
                 return Ok(cancelled_poll());
@@ -1446,6 +1479,7 @@ pub(crate) async fn auth_poll(app_dir: &Path) -> Result<AuthPoll, String> {
             let mut auth = read_auth_unlocked(app_dir)?;
             auth.access_token = access_token;
             auth.login = login.clone();
+            auth.avatar_url = profile.avatar_url;
             auth.scope = scope;
             write_auth_unlocked(app_dir, &auth)?;
             Ok(AuthPoll {
@@ -1946,6 +1980,7 @@ mod tests {
                 client_id: "Iv1.example".to_string(),
                 access_token: "gho_local_token".to_string(),
                 login: "octocat".to_string(),
+                avatar_url: "https://avatars.githubusercontent.com/u/1?v=4".to_string(),
                 scope: SCOPE.to_string(),
             },
         )
@@ -1960,6 +1995,7 @@ mod tests {
         let auth = read_auth(&dir.0).unwrap();
         assert!(auth.access_token.is_empty());
         assert!(auth.login.is_empty());
+        assert!(auth.avatar_url.is_empty());
         assert_eq!(auth.client_id, "Iv1.example");
         let raw = fs::read_to_string(auth_path(&dir.0)).unwrap();
         assert!(!raw.contains("gho_local_token"));
@@ -2046,7 +2082,11 @@ mod tests {
             if let Some((status, body)) = USER_RESPONSE.lock().unwrap().clone() {
                 return (status, body);
             }
-            return (200, r#"{"login":"octocat"}"#.to_string());
+            return (
+                200,
+                r#"{"login":"octocat","avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}"#
+                    .to_string(),
+            );
         }
         if first.starts_with("GET /gists/missing") {
             return (404, r#"{"message":"Not Found"}"#.to_string());
@@ -2178,6 +2218,11 @@ mod tests {
         let saved = status(&dir.0, "").expect("status");
         assert!(saved.signed_in);
         assert_eq!(saved.login, "octocat");
+        // 头像要跟着登录一起存下来，侧栏才能直接显示
+        assert_eq!(
+            saved.avatar_url,
+            "https://avatars.githubusercontent.com/u/1?v=4"
+        );
         let rendered = serde_json::to_string(&polled).unwrap();
         assert!(!rendered.contains("gho_test_token"));
         assert!(!rendered.contains("device-123"));
@@ -2251,6 +2296,7 @@ mod tests {
                 client_id: String::new(),
                 access_token: "gho_test_token".to_string(),
                 login: "octocat".to_string(),
+                avatar_url: String::new(),
                 scope: SCOPE.to_string(),
             },
         )
