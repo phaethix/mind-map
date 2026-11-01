@@ -47,14 +47,14 @@
         </p>
       </div>
 
-      <div class="spacer"></div>
-      <button type="button" class="navItem subtle" @click="openGithub">
-        <span class="icon iconfont icongithub"></span>
-        <span class="label">{{ githubLabel }}</span>
-      </button>
       <button type="button" class="navItem subtle" @click="reveal">
         <span class="icon iconfont icondakai"></span>
         {{ $t('home.reveal') }}
+      </button>
+      <!-- 只有 GitHub 登录态钉在左下角，和 XMind 一样 -->
+      <button type="button" class="navItem subtle pinned" @click="openGithub">
+        <span class="icon iconfont icongithub"></span>
+        <span class="label">{{ githubLabel }}</span>
       </button>
     </aside>
 

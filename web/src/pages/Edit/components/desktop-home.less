@@ -1,6 +1,8 @@
 .desktopHome {
   display: flex;
-  height: 100%;
+  // 根节点的 #app 和 .container 都没有高度，用 100% 会退化成内容高度，
+  // 侧栏底部就压不下去；这里直接按视口算，首页才能自己滚动而不是整页撑高
+  height: 100vh;
   background: #fff;
   color: #1d1d1f;
 
@@ -119,9 +121,9 @@
   gap: 2px;
 }
 
-.spacer {
-  flex: 1;
-  min-height: 24px;
+// 只有 GitHub 登录态吃掉剩余空间，落到侧栏左下角；上面的条目保持自然排列
+.pinned {
+  margin-top: auto;
 }
 
 .hint {
