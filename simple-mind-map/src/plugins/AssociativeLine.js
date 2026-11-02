@@ -6,7 +6,8 @@ import {
   cubicBezierPath,
   getNodePoint,
   computeNodePoints,
-  getNodeLinePath
+  getNodeLinePath,
+  isFreeEndPoint
 } from './associativeLine/associativeLineUtils'
 import associativeLineControlsMethods from './associativeLine/associativeLineControls'
 import associativeLineTextMethods from './associativeLine/associativeLineText'
