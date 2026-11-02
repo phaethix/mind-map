@@ -1,5 +1,40 @@
 import { getTopAncestorsFomNodeList } from '../../utils'
 
+const isFiniteRect = rect => {
+  return (
+    rect &&
+    Number.isFinite(rect.top) &&
+    Number.isFinite(rect.height) &&
+    Number.isFinite(rect.left) &&
+    Number.isFinite(rect.width)
+  )
+}
+
+// 外框的上下留白不能越过相邻兄弟节点：兄弟之间的空隙有限，
+// 留白超过空隙的一半就会压到隔壁的文字上，所以按空隙的一半封顶。
+export const clampOuterFramePadding = (
+  rect,
+  aboveRect,
+  belowRect,
+  paddingY
+) => {
+  const res = {
+    top: paddingY,
+    bottom: paddingY
+  }
+  if (isFiniteRect(rect)) {
+    if (isFiniteRect(aboveRect)) {
+      const gap = rect.top - (aboveRect.top + aboveRect.height)
+      res.top = Math.min(res.top, Math.max(gap / 2, 0))
+    }
+    if (isFiniteRect(belowRect)) {
+      const gap = belowRect.top - (rect.top + rect.height)
+      res.bottom = Math.min(res.bottom, Math.max(gap / 2, 0))
+    }
+  }
+  return res
+}
+
 // 解析要添加外框的节点实例列表
 export const parseAddNodeList = list => {
   // 找出顶层节点

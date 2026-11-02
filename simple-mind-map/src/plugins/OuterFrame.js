@@ -2,11 +2,13 @@ import {
   formatDataToArray,
   walk,
   getNodeListBoundingRect,
+  getNodeTreeBoundingRect,
   createUid
 } from '../utils'
 import {
   parseAddNodeList,
-  getNodeOuterFrameList
+  getNodeOuterFrameList,
+  clampOuterFramePadding
 } from './outerFrame/outerFrameUtils'
 import outerFrameTextMethods from './outerFrame/outerFrameText'
 
@@ -265,8 +267,16 @@ class OuterFrame {
         if (outerFrameList && outerFrameList.length > 0) {
           outerFrameList.forEach(({ nodeList, range }) => {
             if (range[0] === -1 || range[1] === -1) return
-            const { left, top, width, height } =
-              getNodeListBoundingRect(nodeList)
+            // 概要节点也要罩住，否则边框会从概要文字中间穿过去
+            const rect = getNodeListBoundingRect(
+              nodeList,
+              0,
+              0,
+              0,
+              0,
+              true
+            )
+            const { left, top, width, height } = rect
             if (
               !Number.isFinite(left) ||
               !Number.isFinite(top) ||
@@ -274,6 +284,18 @@ class OuterFrame {
               !Number.isFinite(height)
             )
               return
+            // 上下留白要避开相邻兄弟节点，否则外框的边框会压到隔壁的文字上
+            const siblings = cur.children || []
+            const padding = clampOuterFramePadding(
+              rect,
+              siblings[range[0] - 1]
+                ? getNodeTreeBoundingRect(siblings[range[0] - 1])
+                : null,
+              siblings[range[1] + 1]
+                ? getNodeTreeBoundingRect(siblings[range[1] + 1])
+                : null,
+              outerFramePaddingY
+            )
             const el = this.createOuterFrameEl(
               (left -
                 outerFramePaddingX -
@@ -281,12 +303,12 @@ class OuterFrame {
                 t.translateX) /
                 t.scaleX,
               (top -
-                outerFramePaddingY -
+                padding.top -
                 this.mindMap.elRect.top -
                 t.translateY) /
                 t.scaleY,
               (width + outerFramePaddingX * 2) / t.scaleX,
-              (height + outerFramePaddingY * 2) / t.scaleY,
+              (height + padding.top + padding.bottom) / t.scaleY,
               this.getStyle(nodeList[0]) // 使用第一个节点的外框样式
             )
             // 渲染文字，如果有的话

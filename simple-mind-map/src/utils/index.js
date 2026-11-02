@@ -1510,12 +1510,15 @@ export const getNodeTreeBoundingRect = (
 }
 
 // 获取多个节点总的包围框
+// includeGeneralization 为 true 时把概要节点算进来：外框要罩住概要，
+// 否则边框会从概要的文字中间穿过去
 export const getNodeListBoundingRect = (
   nodeList,
   x = 0,
   y = 0,
   paddingX = 0,
-  paddingY = 0
+  paddingY = 0,
+  includeGeneralization = false
 ) => {
   let minX = Infinity
   let maxX = -Infinity
@@ -1529,7 +1532,7 @@ export const getNodeListBoundingRect = (
       paddingX,
       paddingY,
       false,
-      true
+      !includeGeneralization
     )
     if (left < minX) {
       minX = left
