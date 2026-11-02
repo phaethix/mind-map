@@ -507,7 +507,9 @@ export default {
         'demonstrate_jump',
         'exit_demonstrate',
         'node_note_dblclick',
-        'node_mousedown'
+        'node_mousedown',
+        'node_mouseenter',
+        'node_mouseleave'
       ].forEach(event => {
         this.mindMap.on(event, (...args) => {
           this.$bus.$emit(event, ...args)

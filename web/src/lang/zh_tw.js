@@ -62,6 +62,7 @@ export default {
     title: '設置',
     openPerformance: '啟用效能模式',
     enableFreeDrag: '啟用節點自由拖曳 (Beta)',
+    enableAlignmentGuide: '自由拖曳時顯示對齊參考線',
     isEnableNodeRichText: '啟用節點豐富文字編輯',
     mousewheelAction: '滑鼠滾輪行為',
     zoomView: '縮放檢視',
@@ -611,6 +612,14 @@ export default {
     tip3: '鏈接成功',
     tip4: '刪除成功',
     tip5: '鏈接節點不存在，是否刪除該鏈接？'
+  },
+  hoverToolbar: {
+    bold: '加粗',
+    smaller: '縮小字號',
+    larger: '放大字號',
+    color: '文字顏色',
+    addChild: '新增子節點',
+    delete: '刪除節點'
   },
   github: {
     short: 'GitHub',

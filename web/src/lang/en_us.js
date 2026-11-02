@@ -62,6 +62,7 @@ export default {
     title: 'Setting',
     openPerformance: 'Enable performance mode',
     enableFreeDrag: 'Enable node free drag(Beta)',
+    enableAlignmentGuide: 'Show alignment guides while free dragging',
     isEnableNodeRichText: 'Enable node rich text editing',
     mousewheelAction: 'Mouse wheel behavior',
     zoomView: 'Zoom view',
@@ -631,6 +632,14 @@ export default {
     tip3: 'Link successful',
     tip4: 'Delete successful',
     tip5: 'The link node does not exist. Weather to delete the link?'
+  },
+  hoverToolbar: {
+    bold: 'Bold',
+    smaller: 'Smaller font',
+    larger: 'Larger font',
+    color: 'Text color',
+    addChild: 'Add child node',
+    delete: 'Delete node'
   },
   github: {
     short: 'GitHub',

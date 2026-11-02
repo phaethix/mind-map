@@ -61,6 +61,7 @@ export default {
     title: '设置',
     openPerformance: '开启性能模式(Beta)',
     enableFreeDrag: '是否开启节点自由拖拽',
+    enableAlignmentGuide: '自由拖拽时显示对齐参考线',
     isEnableNodeRichText: '是否开启节点富文本编辑',
     mousewheelAction: '鼠标滚轮行为',
     zoomView: '缩放视图',
@@ -611,6 +612,14 @@ export default {
     tip3: '链接成功',
     tip4: '删除成功',
     tip5: '链接节点不存在，是否删除该链接？'
+  },
+  hoverToolbar: {
+    bold: '加粗',
+    smaller: '缩小字号',
+    larger: '放大字号',
+    color: '文字颜色',
+    addChild: '添加子节点',
+    delete: '删除节点'
   },
   github: {
     short: 'GitHub',

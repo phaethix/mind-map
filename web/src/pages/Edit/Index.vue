@@ -17,6 +17,7 @@
     </template>
     <Updater></Updater>
     <GithubSync></GithubSync>
+    <CanvasHoverToolbar></CanvasHoverToolbar>
   </div>
 </template>
 
@@ -27,6 +28,7 @@ import FileHome from './components/FileHome.vue'
 import DesktopHome from './components/DesktopHome.vue'
 import Updater from './components/Updater.vue'
 import GithubSync from './components/GithubSync.vue'
+import CanvasHoverToolbar from './components/CanvasHoverToolbar.vue'
 import { isDesktop } from '@/utils/desktop'
 import { mapState, mapMutations } from 'vuex'
 import { getData, getLocalConfig } from '@/api'
@@ -63,7 +65,8 @@ export default {
     FileHome,
     DesktopHome,
     Updater,
-    GithubSync
+    GithubSync,
+    CanvasHoverToolbar
   },
   data() {
     return {

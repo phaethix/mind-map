@@ -62,6 +62,7 @@ export default {
     title: 'Cài đặt',
     openPerformance: 'Bật chế độ hiệu suất',
     enableFreeDrag: 'Cho phép kéo thả tự do nút (Beta)',
+    enableAlignmentGuide: 'Hiện đường căn chỉnh khi kéo tự do',
     isEnableNodeRichText: 'Cho phép chỉnh sửa văn bản phong phú của nút',
     mousewheelAction: 'Hành vi của con lăn chuột',
     zoomView: 'Thu phóng',
@@ -629,6 +630,14 @@ export default {
     tip3: 'Liên kết thành công',
     tip4: 'Xóa thành công',
     tip5: 'Nút liên kết không tồn tại. Có nên xóa liên kết không?'
+  },
+  hoverToolbar: {
+    bold: 'In đậm',
+    smaller: 'Giảm cỡ chữ',
+    larger: 'Tăng cỡ chữ',
+    color: 'Màu chữ',
+    addChild: 'Thêm nút con',
+    delete: 'Xoá nút'
   },
   github: {
     short: 'GitHub',
