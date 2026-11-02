@@ -259,13 +259,8 @@ export default {
   },
   mounted() {
     showLoading()
-    try {
-      this.getData()
-      this.init()
-    } catch (error) {
-      console.error(error)
-      hideLoading()
-    }
+    // 先绑事件再初始化：首次渲染有可能是同步跑完的，绑晚了就收不到
+    // node_tree_render_end，loading 会一直转下去
     this.$bus.$on('execCommand', this.execCommand)
     this.$bus.$on('paddingChange', this.onPaddingChange)
     this.$bus.$on('export', this.export)
@@ -278,6 +273,15 @@ export default {
     this.$bus.$on('showLoading', this.handleShowLoading)
     this.$bus.$on('localStorageExceeded', this.onLocalStorageExceeded)
     window.addEventListener('resize', this.handleResize)
+    try {
+      this.getData()
+      this.init()
+    } catch (error) {
+      console.error(error)
+      hideLoading()
+    }
+    // 兜底：渲染事件再怎么丢，两秒后也要把 loading 收掉，不能一直转圈
+    this.loadingTimer = setTimeout(() => this.handleHideLoading(), 2000)
   },
   beforeUnmount() {
     this.$bus.$off('execCommand', this.execCommand)
@@ -292,6 +296,7 @@ export default {
     this.$bus.$off('showLoading', this.handleShowLoading)
     this.$bus.$off('localStorageExceeded', this.onLocalStorageExceeded)
     window.removeEventListener('resize', this.handleResize)
+    clearTimeout(this.loadingTimer)
     this.mindMap.destroy()
   },
   methods: {
@@ -327,15 +332,17 @@ export default {
     // 显示loading
     handleShowLoading() {
       this.enableShowLoading = true
+      clearTimeout(this.loadingTimer)
+      this.loadingTimer = setTimeout(() => this.handleHideLoading(), 2000)
       showLoading()
     },
 
-    // 渲染结束后关闭loading
+    // 渲染结束后关闭loading；这里不再看标志位，任何一次渲染完成都应该收掉它
     handleHideLoading() {
-      if (this.enableShowLoading) {
-        this.enableShowLoading = false
-        hideLoading()
-      }
+      clearTimeout(this.loadingTimer)
+      this.loadingTimer = null
+      this.enableShowLoading = false
+      hideLoading()
     },
 
     // 获取思维导图数据，实际应该调接口获取
