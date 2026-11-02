@@ -39,6 +39,34 @@ const services = {
   $notify: ElNotification
 }
 
+// 打包后的桌面端没有控制台。未捕获异常、以及事件总线内部被 try/catch 吞掉的
+// 错误，如果只写进 console，用户和我都看不到，界面会以「能看不能用」的方式坏掉。
+// 这里把第一条错误弹出来（只弹一次、可关闭），当作现场证据。
+let reportedFirstError = false
+const reportFirstError = error => {
+  if (reportedFirstError) return
+  const text = String((error && (error.message || error.stack)) || error || '')
+  if (!text) return
+  reportedFirstError = true
+  ElMessage({
+    type: 'error',
+    message: text.split('\n')[0].slice(0, 200),
+    duration: 0,
+    showClose: true
+  })
+}
+window.addEventListener('error', event =>
+  reportFirstError(event.error || event.message)
+)
+window.addEventListener('unhandledrejection', event =>
+  reportFirstError(event.reason)
+)
+const rawConsoleError = console.error
+console.error = (...args) => {
+  reportFirstError(args.find(item => item instanceof Error) || args[0])
+  rawConsoleError.apply(console, args)
+}
+
 const initApp = () => {
   const app = createApp(App)
 

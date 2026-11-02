@@ -44,12 +44,12 @@ export default {
     this.$bus.$off('data_change', this.onDataChange)
   },
   methods: {
-    // 监听数据变化
+    // 监听数据变化：事件里既可能是根节点，也可能是带了 root 的整份文档
     onDataChange(data) {
       this.textStr = ''
       this.words = 0
       this.num = 0
-      this.walk(data)
+      this.walk(data && data.root ? data.root : data)
       countEl.innerHTML = this.textStr
       this.words = countEl.textContent.length
     },
@@ -58,7 +58,8 @@ export default {
     walk(data) {
       if (!data) return
       this.num++
-      this.textStr += String(data.data.text) || ''
+      const text = data.data && data.data.text
+      this.textStr += text === undefined || text === null ? '' : String(text)
       if (data.children && data.children.length > 0) {
         data.children.forEach(item => {
           this.walk(item)
