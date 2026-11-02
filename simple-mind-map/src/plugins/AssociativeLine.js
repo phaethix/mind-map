@@ -175,10 +175,11 @@ class AssociativeLine {
   // 老版本存的 straight 按圆角折线处理
   getLineShape(node, toNode) {
     const target = node || (this.activeLine && this.activeLine[3])
-    if (!target) return 'elbow'
+    if (!target) return 'curve'
     const shape = this.getStyleConfig(target, toNode).associativeLineShape
-    if (shape === 'straight' || !shape) return 'elbow'
-    return shape
+    // 老版本存的 straight 按圆角折线处理，没配过就用曲线
+    if (shape === 'straight') return 'elbow'
+    return shape || 'curve'
   }
 
   // 实例销毁时清除关联线文字编辑框
@@ -244,14 +245,29 @@ class AssociativeLine {
     let toNodeRange = 0
     let toNodeDir = ''
     if (associativeLinePoint.startPoint) {
-      nodeRange = associativeLinePoint.startPoint.range || 0
-      nodeDir = associativeLinePoint.startPoint.dir || 'right'
-      startPoint = getNodePoint(node, nodeDir, nodeRange)
+      // 拖出来的端点固定在这个坐标，不再跟着节点走
+      if (isFreeEndPoint(associativeLinePoint.startPoint)) {
+        startPoint = {
+          x: associativeLinePoint.startPoint.x,
+          y: associativeLinePoint.startPoint.y
+        }
+      } else {
+        nodeRange = associativeLinePoint.startPoint.range || 0
+        nodeDir = associativeLinePoint.startPoint.dir || 'right'
+        startPoint = getNodePoint(node, nodeDir, nodeRange)
+      }
     }
     if (associativeLinePoint.endPoint) {
-      toNodeRange = associativeLinePoint.endPoint.range || 0
-      toNodeDir = associativeLinePoint.endPoint.dir || 'right'
-      endPoint = getNodePoint(toNode, toNodeDir, toNodeRange)
+      if (isFreeEndPoint(associativeLinePoint.endPoint)) {
+        endPoint = {
+          x: associativeLinePoint.endPoint.x,
+          y: associativeLinePoint.endPoint.y
+        }
+      } else {
+        toNodeRange = associativeLinePoint.endPoint.range || 0
+        toNodeDir = associativeLinePoint.endPoint.dir || 'right'
+        endPoint = getNodePoint(toNode, toNodeDir, toNodeRange)
+      }
     }
     return [startPoint, endPoint]
   }
@@ -487,6 +503,8 @@ class AssociativeLine {
         toNode
       )
     }
+    // 两端的手柄任何形状都有：拖它可以把箭头放到任意位置
+    this.renderEndPointHandles(startPoint, endPoint, node, toNode)
     // 渲染控制点和连线：直线模式没有控制点，跳过
     if (controlPoints.length === 2) {
       this.renderControls(

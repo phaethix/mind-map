@@ -50,7 +50,7 @@ export default {
   // 关联线样式
   associativeLineDasharray: '6,4',
   // 关联线形状：curve 曲线、elbow 圆角折线、sharp 直角折线、line 直线
-  associativeLineShape: 'elbow',
+  associativeLineShape: 'curve',
   // 关联线端点圆点的大小：small / medium / large
   associativeLineMarkerSize: 'medium',
   // 关联线起点装饰：none 无、arrow 箭头、dot 圆点

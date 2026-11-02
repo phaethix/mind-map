@@ -43,8 +43,14 @@ async function main() {
     getStraightLineMid,
     getStraightHandles,
     getStraightAxis,
-    getLineCornerRadius
+    getLineCornerRadius,
+    isFreeEndPoint
   } = await loadUtils()
+
+  // 端点被拖到任意位置后不再跟着节点走：只认 x/y，没有 dir
+  assert.strictEqual(isFreeEndPoint({ x: 10, y: 20 }), true)
+  assert.strictEqual(isFreeEndPoint({ dir: 'right', range: 0 }), false)
+  assert.strictEqual(isFreeEndPoint(null), false)
 
   // 拐角半径：直角折线为 0，其余 12
   assert.strictEqual(getLineCornerRadius('sharp'), 0)

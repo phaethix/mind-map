@@ -15,8 +15,10 @@ export const computeCubicBezierPathPoints = (x1, y1, x2, y2) => {
   let cx2 = cx1
   let cy2 = y2
   if (Math.abs(x1 - x2) <= min) {
-    cx1 = x1 + (y2 - y1) / 2
-    cx2 = cx1
+    // 两端基本在同一竖线上：往右鼓出一个弧，否则曲线退化成一条贴着节点的竖线
+    const bow = Math.max(32, Math.abs(y2 - y1) * 0.28)
+    cx1 = x1 + bow
+    cx2 = x2 + bow
   }
   if (Math.abs(y1 - y2) <= min) {
     cx1 = x1
@@ -387,6 +389,16 @@ export const getStraightLinePath = (
     `Q${x2},${midY} ${x2},${midY + sy * r}`,
     `L${x2},${y2}`
   ].join(' ')
+}
+
+// 端点是否被手动拖到了任意位置（没有 dir 就是自由坐标）
+export const isFreeEndPoint = point => {
+  return Boolean(
+    point &&
+      typeof point.x === 'number' &&
+      typeof point.y === 'number' &&
+      !point.dir
+  )
 }
 
 // 获取节点的关联线路径

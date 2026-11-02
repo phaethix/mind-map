@@ -1,5 +1,7 @@
+import { bfsWalk } from '../../utils'
 import {
   getAssociativeLineTargetIndex,
+  computeCubicBezierPathPoints,
   joinCubicBezierPath,
   getNodePoint,
   getDefaultControlPointOffsets,
@@ -22,6 +24,55 @@ function createControlNodes(node, toNode) {
   // 控制点
   this.controlPoint1 = this.createOneControlNode('controlPoint1', node, toNode)
   this.controlPoint2 = this.createOneControlNode('controlPoint2', node, toNode)
+}
+
+// 创建两端的手柄：拖它可以把箭头放到任意位置
+function createEndPointHandles(node, toNode) {
+  const { associativeLineActiveColor } = this.getStyleConfig(node, toNode)
+  const make = key => {
+    return this.associativeLineDraw
+      .circle(this.controlPointDiameter)
+      .stroke({ color: associativeLineActiveColor, width: 2 })
+      .fill({ color: '#fff' })
+      .click(e => {
+        e.stopPropagation()
+      })
+      .mousedown(e => {
+        this.onControlPointMousedown(e, key)
+      })
+  }
+  this.startPointHandle = make('startPointHandle')
+  this.endPointHandle = make('endPointHandle')
+}
+
+// 端点手柄跟着端点走，任何形状都会显示
+function renderEndPointHandles(startPoint, endPoint, node, toNode) {
+  if (!this.mindMap.opt.enableAdjustAssociativeLinePoints) return
+  if (!this.startPointHandle) {
+    this.createEndPointHandles(node, toNode)
+  }
+  const radius = this.controlPointDiameter / 2
+  this.startPointHandle
+    .x(startPoint.x - radius)
+    .y(startPoint.y - radius)
+  this.endPointHandle.x(endPoint.x - radius).y(endPoint.y - radius)
+}
+
+// 命中测试：端点落到哪个节点上
+function findNodeByPoint(mindMap, x, y) {
+  let hit = null
+  bfsWalk(mindMap.renderer.root, node => {
+    if (hit || !node || node.isGeneralization) return
+    if (
+      x >= node.left &&
+      x <= node.left + node.width &&
+      y >= node.top &&
+      y <= node.top + node.height
+    ) {
+      hit = node
+    }
+  })
+  return hit
 }
 
 // 创建控制点
@@ -94,6 +145,21 @@ function onControlPointMousemove(e) {
   const _e = {
     clientX,
     clientY
+  }
+  // 拖动端点手柄：箭头可以放到任意位置，松手时若压在节点上会吸附到最近的边
+  if (
+    this.mousedownControlPointKey === 'startPointHandle' ||
+    this.mousedownControlPointKey === 'endPointHandle'
+  ) {
+    const isStart = this.mousedownControlPointKey === 'startPointHandle'
+    this[this.mousedownControlPointKey].x(x - radius).y(y - radius)
+    const start = isStart ? { x, y } : startPoint
+    const end = isStart ? endPoint : { x, y }
+    const points = computeCubicBezierPathPoints(start.x, start.y, end.x, end.y)
+    this.controlPointMousemoveState.startPoint = start
+    this.controlPointMousemoveState.endPoint = end
+    this.updataAassociativeLine(start, end, points[0], points[1], this.activeLine)
+    return
   }
   // 直线模式只平移折弯段，端点继续贴着节点；两个控制点一起跟着走
   if (this.getLineShape(node, toNode) !== 'curve') {
@@ -212,6 +278,44 @@ function onControlPointMouseup(e) {
   } else {
     offsetList = associativeLineTargetControlOffsets
   }
+  // 端点手柄：存成自由坐标，落在节点上就贴到最近的边
+  if (
+    this.mousedownControlPointKey === 'startPointHandle' ||
+    this.mousedownControlPointKey === 'endPointHandle'
+  ) {
+    const isStart = this.mousedownControlPointKey === 'startPointHandle'
+    const point = { x: pos.x, y: pos.y }
+    const hit = findNodeByPoint(this.mindMap, point.x, point.y)
+    if (hit) {
+      const centerX = hit.left + hit.width / 2
+      const centerY = hit.top + hit.height / 2
+      const horizontal =
+        Math.abs(point.x - centerX) / (hit.width || 1) >
+        Math.abs(point.y - centerY) / (hit.height || 1)
+      if (horizontal) {
+        point.x = point.x < centerX ? hit.left : hit.left + hit.width
+      } else {
+        point.y = point.y < centerY ? hit.top : hit.top + hit.height
+      }
+    }
+    const [, , , sourceNode, targetNode] = this.activeLine
+    const index = getAssociativeLineTargetIndex(sourceNode, targetNode)
+    const list = (sourceNode.getData('associativeLinePoint') || []).slice()
+    list[index] = list[index] || {}
+    if (isStart) {
+      list[index].startPoint = point
+    } else {
+      list[index].endPoint = point
+    }
+    this.mindMap.execCommand('SET_NODE_DATA', sourceNode, {
+      associativeLinePoint: list
+    })
+    this.isNotRenderAllLines = true
+    setTimeout(() => {
+      this.resetControlPoint()
+    }, 0)
+    return
+  }
   let offset1 = null
   let offset2 = null
   if (this.mousedownControlPointKey === 'controlPoint1') {
@@ -290,14 +394,18 @@ function removeControls() {
     this.controlLine1,
     this.controlLine2,
     this.controlPoint1,
-    this.controlPoint2
+    this.controlPoint2,
+    this.startPointHandle,
+    this.endPointHandle
   ].forEach(item => {
-    item.remove()
+    if (item) item.remove()
   })
   this.controlLine1 = null
   this.controlLine2 = null
   this.controlPoint1 = null
   this.controlPoint2 = null
+  this.startPointHandle = null
+  this.endPointHandle = null
 }
 
 // 隐藏控制点
@@ -328,6 +436,8 @@ function showControls() {
 
 export default {
   createControlNodes,
+  createEndPointHandles,
+  renderEndPointHandles,
   createOneControlNode,
   onControlPointMousedown,
   onControlPointMousemove,
