@@ -8,6 +8,7 @@ import {
 import Base from '../layouts/Base'
 import { CONSTANTS } from '../constants/constant'
 import AutoMove from '../utils/AutoMove'
+import { computeAlignmentGuide } from './alignmentGuide/alignmentGuideUtils'
 
 // 节点拖动插件
 class Drag extends Base {
@@ -38,6 +39,8 @@ class Drag extends Base {
     this.nextNode = null
     // 画布的变换数据
     this.drawTransform = null
+    // 对齐参考线的元素
+    this.clearAlignmentGuide()
     // 克隆节点
     this.clone = null
     // 同级位置占位符
@@ -235,6 +238,19 @@ class Drag extends Base {
     let cloneNodeTop = y - this.offsetY
     x = (cloneNodeLeft - translateX) / scaleX
     y = (cloneNodeTop - translateY) / scaleY
+    // 自由拖拽单个节点时才对其它节点做对齐吸附
+    if (this.canUseAlignmentGuide()) {
+      const node = this.mousedownNode
+      const { dx, dy, guides } = computeAlignmentGuide(
+        { x, y, width: node.width, height: node.height },
+        this.nodeList,
+        this.mindMap.opt.alignmentGuideThreshold,
+        scaleX
+      )
+      x += dx
+      y += dy
+      this.renderAlignmentGuide(guides)
+    }
     let t = this.clone.transform()
     this.clone.translate(x - t.translateX, y - t.translateY)
     // 检测新位置
@@ -243,6 +259,49 @@ class Drag extends Base {
     this.drawTransform = this.mindMap.draw.transform()
     this.autoMove.clearAutoMoveTimer()
     this.autoMove.onMove(e.clientX, e.clientY)
+  }
+
+  // 只有开启自由拖拽、且只拖一个节点时才需要对齐参考线
+  canUseAlignmentGuide() {
+    const { enableFreeDrag, enableAlignmentGuide } = this.mindMap.opt
+    return (
+      enableFreeDrag &&
+      enableAlignmentGuide !== false &&
+      this.beingDragNodeList.length === 1
+    )
+  }
+
+  // 画参考线，每次移动前先清掉上一批
+  renderAlignmentGuide(guides) {
+    this.clearAlignmentGuide()
+    if (!guides || guides.length === 0) return
+    const { alignmentGuideConfig } = this.mindMap.opt
+    const {
+      color = 'rgb(94, 200, 248)',
+      width = 1,
+      dasharray = '4,4'
+    } = alignmentGuideConfig || {}
+    guides.forEach(guide => {
+      const line = this.mindMap.otherDraw
+        .line()
+        .stroke({ color, width, dasharray })
+      if (guide.axis === 'x') {
+        line.plot(guide.value, guide.start, guide.value, guide.end)
+      } else {
+        line.plot(guide.start, guide.value, guide.end, guide.value)
+      }
+      this.alignmentGuideElList.push(line)
+    })
+  }
+
+  // 清除参考线
+  clearAlignmentGuide() {
+    if (!this.alignmentGuideElList) {
+      this.alignmentGuideElList = []
+      return
+    }
+    this.alignmentGuideElList.forEach(el => el.remove())
+    this.alignmentGuideElList = []
   }
 
   // 开始拖拽时初始化一些数据

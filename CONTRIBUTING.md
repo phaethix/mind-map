@@ -37,6 +37,7 @@ Every issue carries one type label, usually one or two area labels, and `needs t
    bun web/src/utils/githubStatus.test.cjs
    bun simple-mind-map/test/xmind-associative-line.test.cjs
    bun simple-mind-map/test/associative-line-path.test.cjs
+   bun simple-mind-map/test/alignment-guide.test.cjs
    bun simple-mind-map/test/outer-frame-padding.test.cjs
    cd web && bun install --frozen-lockfile && npm run build
    ```

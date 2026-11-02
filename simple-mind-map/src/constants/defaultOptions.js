@@ -348,6 +348,16 @@ export const defaultOpt = {
     color: 'rgb(94, 200, 248)',
     width: 2
   },
+  // 自由拖拽时是否显示对齐参考线并轻微吸附
+  enableAlignmentGuide: true,
+  // 吸附阈值，屏幕像素
+  alignmentGuideThreshold: 6,
+  // 对齐参考线的样式
+  alignmentGuideConfig: {
+    color: 'rgb(94, 200, 248)',
+    width: 1,
+    dasharray: '4,4'
+  },
   // 节点拖拽时的透明度配置
   dragOpacityConfig: {
     cloneNodeOpacity: 0.5, // 跟随鼠标移动的克隆节点或矩形的透明度

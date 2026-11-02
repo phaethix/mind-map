@@ -150,6 +150,7 @@ jobs:
           bun simple-mind-map/test/xmind-associative-line.test.cjs
           bun simple-mind-map/test/outer-frame-padding.test.cjs
           bun simple-mind-map/test/associative-line-path.test.cjs
+          bun simple-mind-map/test/alignment-guide.test.cjs
 
       - name: Build web app
         working-directory: web

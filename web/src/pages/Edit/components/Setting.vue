@@ -170,6 +170,20 @@
           >
         </div>
       </div>
+      <!-- 自由拖拽时的对齐参考线 -->
+      <div class="row">
+        <div class="rowItem">
+          <el-checkbox
+            v-model="config.enableAlignmentGuide"
+            @change="
+              value => {
+                updateOtherConfig('enableAlignmentGuide', value)
+              }
+            "
+            >{{ $t('setting.enableAlignmentGuide') }}</el-checkbox
+          >
+        </div>
+      </div>
       <!-- 配置是否启用富文本编辑 -->
       <div class="row">
         <div class="rowItem">
@@ -396,6 +410,7 @@ export default {
       config: {
         openPerformance: false,
         enableFreeDrag: false,
+        enableAlignmentGuide: true,
         mousewheelAction: 'zoom',
         mousewheelZoomActionReverse: false,
         createNewNodeBehavior: 'default',
