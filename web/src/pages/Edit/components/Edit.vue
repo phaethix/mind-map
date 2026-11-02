@@ -219,6 +219,7 @@ export default {
   data() {
     return {
       enableShowLoading: true,
+      initError: null,
       mindMap: null,
       mindMapData: null,
       mindMapConfig: {},
@@ -278,10 +279,13 @@ export default {
       this.init()
     } catch (error) {
       console.error(error)
+      // 初始化失败时别只把遮罩收掉就完事，界面会变成"能看不能用"，
+      // 至少把真实原因弹出来，用户才能反馈
+      this.initError = error
       hideLoading()
     }
-    // 兜底：渲染事件再怎么丢，两秒后也要把 loading 收掉，不能一直转圈
-    this.loadingTimer = setTimeout(() => this.handleHideLoading(), 2000)
+    // 兜底：渲染事件再怎么丢，三秒后也要把 loading 收掉，不能一直转圈
+    this.loadingTimer = setTimeout(() => this.handleHideLoading(), 3000)
   },
   beforeUnmount() {
     this.$bus.$off('execCommand', this.execCommand)
@@ -343,6 +347,11 @@ export default {
       this.loadingTimer = null
       this.enableShowLoading = false
       hideLoading()
+      if (this.initError) {
+        const error = this.initError
+        this.initError = null
+        this.$message.error(String((error && error.message) || error))
+      }
     },
 
     // 获取思维导图数据，实际应该调接口获取

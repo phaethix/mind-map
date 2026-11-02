@@ -111,25 +111,37 @@ export default {
     }
   },
   created() {
-    this.$bus.$on('mindMapReady', this.onMindMapReady)
-    this.$bus.$on('node_mouseenter', this.onNodeMouseenter)
-    this.$bus.$on('node_mouseleave', this.scheduleHide)
-    this.$bus.$on('node_tree_render_end', this.reposition)
-    this.$bus.$on('draw_click', this.hideNow)
-    this.$bus.$on('scale', this.reposition)
-    this.$bus.$on('translate', this.reposition)
+    this.bindEvent('mindMapReady', this.onMindMapReady)
+    this.bindEvent('node_mouseenter', this.onNodeMouseenter)
+    this.bindEvent('node_mouseleave', this.scheduleHide)
+    this.bindEvent('node_tree_render_end', this.reposition)
+    this.bindEvent('draw_click', this.hideNow)
+    this.bindEvent('scale', this.reposition)
+    this.bindEvent('translate', this.reposition)
   },
   beforeUnmount() {
-    this.$bus.$off('mindMapReady', this.onMindMapReady)
-    this.$bus.$off('node_mouseenter', this.onNodeMouseenter)
-    this.$bus.$off('node_mouseleave', this.scheduleHide)
-    this.$bus.$off('node_tree_render_end', this.reposition)
-    this.$bus.$off('draw_click', this.hideNow)
-    this.$bus.$off('scale', this.reposition)
-    this.$bus.$off('translate', this.reposition)
+    Object.keys(this.safeHandlers || {}).forEach(name => {
+      this.$bus.$off(name, this.safeHandlers[name])
+    })
+    this.safeHandlers = {}
     clearTimeout(this.hideTimer)
   },
   methods: {
+    // 浮层的回调绝不能让异常冒到事件总线上：同一个事件上还挂着编辑器的
+    // loading、工具栏的选中状态等监听者，一旦被打断整个界面就"半死"
+    bindEvent(name, handler) {
+      const safe = (...args) => {
+        try {
+          handler(...args)
+        } catch (error) {
+          console.error(error)
+        }
+      }
+      this.safeHandlers = this.safeHandlers || {}
+      this.safeHandlers[name] = safe
+      this.$bus.$on(name, safe)
+    },
+
     onMindMapReady(mindMap) {
       this.mindMap = mindMap
     },
