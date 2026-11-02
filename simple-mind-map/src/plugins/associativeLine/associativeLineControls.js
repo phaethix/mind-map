@@ -2,7 +2,11 @@ import {
   getAssociativeLineTargetIndex,
   joinCubicBezierPath,
   getNodePoint,
-  getDefaultControlPointOffsets
+  getDefaultControlPointOffsets,
+  getStraightLinePath,
+  getStraightLineMid,
+  getStraightHandles,
+  getLineCornerRadius
 } from './associativeLineUtils'
 
 // 创建控制点、连线节点
@@ -91,6 +95,23 @@ function onControlPointMousemove(e) {
     clientX,
     clientY
   }
+  // 直线模式只平移折弯段，端点继续贴着节点；两个控制点一起跟着走
+  if (this.getLineShape(node, toNode) !== 'curve') {
+    const mid = getStraightLineMid(startPoint, endPoint, { x, y }, { x, y })
+    const handles = getStraightHandles(startPoint, endPoint, mid)
+    this.controlPoint1.x(handles[0].x - radius).y(handles[0].y - radius)
+    this.controlPoint2.x(handles[1].x - radius).y(handles[1].y - radius)
+    this.controlLine1.plot(startPoint.x, startPoint.y, handles[0].x, handles[0].y)
+    this.controlLine2.plot(endPoint.x, endPoint.y, handles[1].x, handles[1].y)
+    this.updataAassociativeLine(
+      startPoint,
+      endPoint,
+      handles[0],
+      handles[1],
+      this.activeLine
+    )
+    return
+  }
   // 拖拽的是控制点1
   if (this.mousedownControlPointKey === 'controlPoint1') {
     startPoint = getNodePoint(nodePos, '', 0, _e)
@@ -142,9 +163,17 @@ function updataAassociativeLine(
   point2,
   activeLine
 ) {
-  const [path, clickPath, text] = activeLine
+  const [path, clickPath, text, node] = activeLine
   // 更新关联线
-  const pathStr = joinCubicBezierPath(startPoint, endPoint, point1, point2)
+  const pathStr =
+    this.getLineShape(node) !== 'curve'
+      ? getStraightLinePath(
+          startPoint,
+          endPoint,
+          12,
+          getStraightLineMid(startPoint, endPoint, point1, point2)
+        )
+      : joinCubicBezierPath(startPoint, endPoint, point1, point2)
   path.plot(pathStr)
   clickPath.plot(pathStr)
   this.updateTextPos(path, text)
@@ -158,6 +187,11 @@ function onControlPointMouseup(e) {
   e.preventDefault()
   let { pos, startPoint, endPoint, targetIndex } =
     this.controlPointMousemoveState
+  // 只是点了一下控制点、没有拖动：保持原有调整不变
+  if (!pos) {
+    this.resetControlPoint()
+    return
+  }
   let [, , , node] = this.activeLine
   let offsetList = []
   let { associativeLinePoint, associativeLineTargetControlOffsets } =
@@ -196,6 +230,19 @@ function onControlPointMouseup(e) {
       y: pos.y - endPoint.y
     }
     associativeLinePoint[targetIndex].endPoint = endPoint
+  }
+  // 直线模式：两个控制点在同一段折弯线上，按中点统一保存，下次渲染才回得来
+  if (this.getLineShape(node) !== 'curve') {
+    const mid = getStraightLineMid(startPoint, endPoint, pos, pos)
+    const horizontal =
+      Math.abs(endPoint.x - startPoint.x) >=
+      Math.abs(endPoint.y - startPoint.y)
+    offset1 = horizontal
+      ? { x: mid - startPoint.x, y: 0 }
+      : { x: 0, y: mid - startPoint.y }
+    offset2 = horizontal
+      ? { x: mid - endPoint.x, y: 0 }
+      : { x: 0, y: mid - endPoint.y }
   }
   offsetList[targetIndex] = [offset1, offset2]
   this.mindMap.execCommand('SET_NODE_DATA', node, {

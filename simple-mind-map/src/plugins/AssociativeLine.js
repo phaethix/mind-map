@@ -20,10 +20,35 @@ const styleProps = [
   'associativeLineTextColor',
   'associativeLineTextFontSize',
   'associativeLineTextLineHeight',
-  'associativeLineTextFontFamily'
+  'associativeLineTextFontFamily',
+  'associativeLineShape',
+  'associativeLineStartMarker',
+  'associativeLineEndMarker',
+  'associativeLineMarkerSize'
 ]
 
 const ASSOCIATIVE_LINE_TEXT_EDIT_WRAP = 'associative-line-text-edit-warp'
+
+// 圆点装饰的三档半径
+const DOT_RADIUS = {
+  small: 4,
+  medium: 6,
+  large: 9
+}
+
+// 关联线起止点可以选用的装饰：箭头的尖端、圆点的圆心都落在 ref 上
+const MARKER_SHAPES = {
+  arrow: {
+    path: 'M0,0 L2,5 L0,10 L10,5 Z',
+    ref: [12, 5],
+    size: [10, 10]
+  },
+  dot: {
+    dot: true,
+    ref: [10, 10],
+    size: [20, 20]
+  }
+}
 
 // 关联线插件
 class AssociativeLine {
@@ -146,6 +171,16 @@ class AssociativeLine {
     return res
   }
 
+  // 关联线形状：curve 曲线、elbow 圆角折线、sharp 直角折线、line 直线
+  // 老版本存的 straight 按圆角折线处理
+  getLineShape(node, toNode) {
+    const target = node || (this.activeLine && this.activeLine[3])
+    if (!target) return 'elbow'
+    const shape = this.getStyleConfig(target, toNode).associativeLineShape
+    if (shape === 'straight' || !shape) return 'elbow'
+    return shape
+  }
+
   // 实例销毁时清除关联线文字编辑框
   onBeforeDestroy() {
     this.hideEditTextBox()
@@ -175,14 +210,29 @@ class AssociativeLine {
     }
   }
 
-  // 创建箭头
-  createMarker(callback = () => {}) {
+  // 创建起止点的装饰：箭头或圆点，圆点可以选大小
+  createMarker(kind = 'arrow', size = 'medium', callback = () => {}) {
+    const shape = MARKER_SHAPES[kind] || MARKER_SHAPES.arrow
+    const radius = DOT_RADIUS[size] || DOT_RADIUS.medium
     return this.associativeLineDraw.marker(20, 20, add => {
-      add.ref(12, 5)
-      add.size(10, 10)
+      add.ref(shape.ref[0], shape.ref[1])
+      add.size(shape.size[0], shape.size[1])
       add.attr('orient', 'auto-start-reverse')
-      callback(add.path('M0,0 L2,5 L0,10 L10,5 Z'))
+      const element = shape.dot
+        ? add.circle(radius).center(10, 10)
+        : add.path(shape.path)
+      callback(element)
     })
+  }
+
+  // 起止点装饰的配置，none 表示不画
+  getMarkerConfig(node, toNode) {
+    const style = this.getStyleConfig(node, toNode)
+    return {
+      start: style.associativeLineStartMarker || 'none',
+      end: style.associativeLineEndMarker || 'arrow',
+      size: style.associativeLineMarkerSize || 'medium'
+    }
   }
 
   // 判断关联线坐标是否变更，有变更则使用变化后的坐标，无则默认坐标
@@ -265,20 +315,28 @@ class AssociativeLine {
       associativeLineActiveWidth,
       associativeLineDasharray
     } = this.getStyleConfig(node, toNode)
-    // 箭头
-    let markerPath = null
-    const marker = this.createMarker(p => {
-      markerPath = p
-    })
-    markerPath
-      .stroke({ color: associativeLineColor })
-      .fill({ color: associativeLineColor })
-    // 路径
+    // 起止点装饰：可以分别是无、箭头、圆点
+    const markerConfig = this.getMarkerConfig(node, toNode)
+    const markerPathList = []
+    const createMarker = kind => {
+      let element = null
+      const marker = this.createMarker(kind, markerConfig.size, p => {
+        element = p
+      })
+      element
+        .stroke({ color: associativeLineColor })
+        .fill({ color: associativeLineColor })
+      markerPathList.push(element)
+      return marker
+    }
+    // 路径：直线（圆角折弯）是默认形态，主题里可以切回曲线
+    const shape = this.getLineShape(node, toNode)
     let { path: pathStr, controlPoints } = getNodeLinePath(
       startPoint,
       endPoint,
       node,
-      toNode
+      toNode,
+      shape
     )
     // 虚线
     let path = this.associativeLineDraw.path()
@@ -290,7 +348,12 @@ class AssociativeLine {
       })
       .fill({ color: 'none' })
     path.plot(pathStr)
-    path.marker('end', marker)
+    if (markerConfig.start !== 'none') {
+      path.marker('start', createMarker(markerConfig.start))
+    }
+    if (markerConfig.end !== 'none') {
+      path.marker('end', createMarker(markerConfig.end))
+    }
     // 不可见的点击线
     let clickPath = this.associativeLineDraw.path()
     clickPath
@@ -301,7 +364,7 @@ class AssociativeLine {
     let text = this.createText({
       path,
       clickPath,
-      markerPath,
+      markerPath: markerPathList,
       node,
       toNode,
       startPoint,
@@ -314,7 +377,7 @@ class AssociativeLine {
       this.setActiveLine({
         path,
         clickPath,
-        markerPath,
+        markerPath: markerPathList,
         text,
         node,
         toNode,
@@ -363,9 +426,11 @@ class AssociativeLine {
         color: associativeLineActiveColor
       })
       .fill({ color: 'none' })
-    markerPath
-      .stroke({ color: associativeLineColor })
-      .fill({ color: associativeLineColor })
+    const markerList = Array.isArray(markerPath) ? markerPath : [markerPath]
+    markerList.forEach(item => {
+      if (!item) return
+      item.stroke({ color: associativeLineColor }).fill({ color: associativeLineColor })
+    })
     text.find('text').forEach(textNode => {
       textNode
         .fill({
@@ -422,15 +487,17 @@ class AssociativeLine {
         toNode
       )
     }
-    // 渲染控制点和连线
-    this.renderControls(
-      startPoint,
-      endPoint,
-      controlPoints[0],
-      controlPoints[1],
-      node,
-      toNode
-    )
+    // 渲染控制点和连线：直线模式没有控制点，跳过
+    if (controlPoints.length === 2) {
+      this.renderControls(
+        startPoint,
+        endPoint,
+        controlPoints[0],
+        controlPoints[1],
+        node,
+        toNode
+      )
+    }
     this.mindMap.emit('associative_line_click', path, clickPath, node, toNode)
     this.front()
   }
@@ -471,9 +538,9 @@ class AssociativeLine {
         dasharray: associativeLineDasharray || '6,4'
       })
       .fill({ color: 'none' })
-    // 箭头
+    // 创建过程中固定用箭头预览
     let markerPath = null
-    const marker = this.createMarker(p => {
+    const marker = this.createMarker('arrow', 'medium', p => {
       markerPath = p
     })
     markerPath

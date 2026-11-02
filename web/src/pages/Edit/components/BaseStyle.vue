@@ -542,6 +542,130 @@
           </el-select>
         </div>
       </div>
+      <div class="row">
+        <div class="rowItem">
+          <span class="name">{{ $t('baseStyle.associativeLineShape') }}</span>
+          <el-select
+            size="mini"
+            style="width: 110px"
+            v-model="style.associativeLineShape"
+            placeholder=""
+            @change="
+              value => {
+                update('associativeLineShape', value)
+              }
+            "
+          >
+            <el-option
+              :label="$t('baseStyle.associativeLineElbow')"
+              value="elbow"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.associativeLineSharp')"
+              value="sharp"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.associativeLineStraight')"
+              value="line"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.associativeLineCurve')"
+              value="curve"
+            ></el-option>
+          </el-select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="rowItem">
+          <span class="name">{{
+            $t('baseStyle.associativeLineStartMarker')
+          }}</span>
+          <el-select
+            size="mini"
+            style="width: 80px"
+            v-model="style.associativeLineStartMarker"
+            placeholder=""
+            @change="
+              value => {
+                update('associativeLineStartMarker', value)
+              }
+            "
+          >
+            <el-option
+              :label="$t('baseStyle.markerNone')"
+              value="none"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.markerArrow')"
+              value="arrow"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.markerDot')"
+              value="dot"
+            ></el-option>
+          </el-select>
+        </div>
+        <div class="rowItem">
+          <span class="name">{{
+            $t('baseStyle.associativeLineEndMarker')
+          }}</span>
+          <el-select
+            size="mini"
+            style="width: 80px"
+            v-model="style.associativeLineEndMarker"
+            placeholder=""
+            @change="
+              value => {
+                update('associativeLineEndMarker', value)
+              }
+            "
+          >
+            <el-option
+              :label="$t('baseStyle.markerNone')"
+              value="none"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.markerArrow')"
+              value="arrow"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.markerDot')"
+              value="dot"
+            ></el-option>
+          </el-select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="rowItem">
+          <span class="name">{{
+            $t('baseStyle.associativeLineMarkerSize')
+          }}</span>
+          <el-select
+            size="mini"
+            style="width: 80px"
+            v-model="style.associativeLineMarkerSize"
+            placeholder=""
+            @change="
+              value => {
+                update('associativeLineMarkerSize', value)
+              }
+            "
+          >
+            <el-option
+              :label="$t('baseStyle.markerSizeSmall')"
+              value="small"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.markerSizeMedium')"
+              value="medium"
+            ></el-option>
+            <el-option
+              :label="$t('baseStyle.markerSizeLarge')"
+              value="large"
+            ></el-option>
+          </el-select>
+        </div>
+      </div>
       <!-- 关联线文字 -->
       <div class="title">{{ $t('baseStyle.associativeLineText') }}</div>
       <div class="row">
@@ -850,6 +974,10 @@ export default {
         associativeLineWidth: 0,
         associativeLineActiveWidth: 0,
         associativeLineDasharray: '',
+        associativeLineShape: '',
+        associativeLineStartMarker: '',
+        associativeLineEndMarker: '',
+        associativeLineMarkerSize: '',
         associativeLineActiveColor: '',
         associativeLineTextFontSize: 0,
         associativeLineTextColor: '',
