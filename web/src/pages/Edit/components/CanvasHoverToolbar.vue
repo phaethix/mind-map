@@ -8,6 +8,7 @@
       :style="{ left: left + 'px', top: top + 'px' }"
       @mouseenter="cancelHide"
       @mouseleave="scheduleHide"
+      @mousedown.stop.prevent
     >
       <template v-if="kind === 'node'">
         <button

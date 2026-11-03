@@ -1,4 +1,5 @@
 import Base from './Base'
+import { generalizationBracketPath } from './generalizationBracket'
 import { walk, asyncRun, getNodeIndexInNodeList } from '../utils'
 
 //  组织结构图
@@ -304,9 +305,10 @@ class OrganizationStructure extends Base {
       let y1 = bottom + generalizationLineMargin
       let x2 = right
       let y2 = bottom + generalizationLineMargin
-      let cx = x1 + (x2 - x1) / 2
-      let cy = y1 + 20
-      let path = `M ${x1},${y1} Q ${cx},${cy} ${x2},${y2}`
+      let path = generalizationBracketPath(x1, y1, x2, y2, {
+        horizontal: false,
+        sign: 1
+      })
       item.generalizationLine.plot(this.transformPath(path))
       item.generalizationNode.top = bottom + generalizationNodeMargin
       item.generalizationNode.left =

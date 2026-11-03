@@ -35,10 +35,10 @@ export default {
   generalizationLineWidth: 1,
   // 概要连线的颜色
   generalizationLineColor: '#549688',
-  // 概要曲线距节点的距离
+  // 概要括号距被概括节点的距离
   generalizationLineMargin: 0,
-  // 概要节点距节点的距离
-  generalizationNodeMargin: 20,
+  // 概要节点距括号的距离。括号自己还会向外凸出圆角，这里要留出这条缝
+  generalizationNodeMargin: 12,
   // 关联线默认状态的粗细
   associativeLineWidth: 2,
   // 关联线默认状态的颜色

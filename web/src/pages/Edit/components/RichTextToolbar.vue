@@ -4,6 +4,7 @@
     ref="richTextToolbar"
     :style="style"
     :class="{ isDark: isDark }"
+    @mousedown.stop.prevent
     @click.stop.passive
     v-show="showRichTextToolbar"
   >

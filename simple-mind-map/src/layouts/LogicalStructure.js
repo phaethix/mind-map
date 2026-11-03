@@ -1,4 +1,5 @@
 import Base from './Base'
+import { generalizationBracketPath } from './generalizationBracket'
 import { walk, asyncRun, getNodeIndexInNodeList } from '../utils'
 import { CONSTANTS } from '../constants/constant'
 
@@ -335,9 +336,10 @@ class LogicalStructure extends Base {
       let y1 = top
       let x2 = x
       let y2 = bottom
-      let cx = x1 + (this.isUseLeft ? -20 : 20)
-      let cy = y1 + (y2 - y1) / 2
-      let path = `M ${x1},${y1} Q ${cx},${cy} ${x2},${y2}`
+      let path = generalizationBracketPath(x1, y1, x2, y2, {
+        horizontal: true,
+        sign: this.isUseLeft ? -1 : 1
+      })
       item.generalizationLine.plot(path)
       item.generalizationNode.left =
         x +

@@ -492,6 +492,16 @@ class RichText {
         event.clipboardData.setData('text/plain', originStr)
       }
     })
+    // 加粗会换掉选区底下的文本节点。Quill 再去读 offset 时 blot 已经是 null，
+    // 异常会冒到界面上，但格式其实已经写上了。读失败就沿用上一次的范围。
+    const readRange = this.quill.selection.getRange.bind(this.quill.selection)
+    this.quill.selection.getRange = () => {
+      try {
+        return readRange()
+      } catch (error) {
+        return [this.quill.selection.lastRange, this.quill.selection.lastNative]
+      }
+    }
     this.quill.on('selection-change', range => {
       // 刚创建的节点全选不需要显示操作条
       if (this.isInserting) {
@@ -502,7 +512,16 @@ class RichText {
       this.range = null
       if (range) {
         this.pasteUseRange = range
-        let bounds = this.quill.getBounds(range.index, range.length)
+        let bounds = null
+        try {
+          bounds = this.quill.getBounds(range.index, range.length)
+        } catch (error) {
+          bounds = null
+        }
+        if (!bounds) {
+          this.mindMap.emit('rich_text_selection_change', false, null, null)
+          return
+        }
         let rect = this.textEditNode.getBoundingClientRect()
         let rectInfo = {
           left: bounds.left + rect.left,
