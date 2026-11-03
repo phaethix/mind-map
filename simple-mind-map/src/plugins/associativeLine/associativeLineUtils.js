@@ -38,6 +38,38 @@ export const computeCubicBezierPathPoints = (x1, y1, x2, y2) => {
   ]
 }
 
+// 拖动手柄时的预览要和最终渲染同一套形状。圆角半径写死成 12 的话，
+// 直角折线和直线在松手之前都会被画成圆角折线。
+export const previewAssociativeLinePath = (
+  shape,
+  startPoint,
+  endPoint,
+  point1,
+  point2
+) => {
+  if (shape === 'line') {
+    return `M${startPoint.x},${startPoint.y} L${endPoint.x},${endPoint.y}`
+  }
+  if (shape !== 'curve') {
+    return getStraightLinePath(
+      startPoint,
+      endPoint,
+      getLineCornerRadius(shape),
+      getStraightLineMid(startPoint, endPoint, point1, point2)
+    )
+  }
+  const points =
+    point1 && point2
+      ? [point1, point2]
+      : computeCubicBezierPathPoints(
+          startPoint.x,
+          startPoint.y,
+          endPoint.x,
+          endPoint.y
+        )
+  return joinCubicBezierPath(startPoint, endPoint, points[0], points[1])
+}
+
 // 拼接贝塞尔曲线路径
 export const joinCubicBezierPath = (startPoint, endPoint, point1, point2) => {
   return `M ${startPoint.x},${startPoint.y} C ${point1.x},${point1.y} ${point2.x},${point2.y} ${endPoint.x},${endPoint.y}`

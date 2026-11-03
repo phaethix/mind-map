@@ -98,10 +98,12 @@ export default {
     this.$bus.$on('showFileHome', this.leaveEditor)
     this.$bus.$on('enterEditor', this.enterEditor)
     this.$bus.$on('saveMindMap', this.saveCurrent)
+    this.$bus.$on('desktopNotice', this.onDesktopNotice)
     window.addEventListener('keydown', this.onKeydownSave, true)
     // 推送到 Gist 时用编辑器里的最新数据，而不是磁盘上可能过期的那一份
     window.__desktopDocumentData = () => {
       if (this.screen === 'edit' && this.mindMap) {
+        this.commitActiveText()
         return this.documentData()
       }
       if (
@@ -130,6 +132,7 @@ export default {
     this.$bus.$off('showFileHome', this.leaveEditor)
     this.$bus.$off('enterEditor', this.enterEditor)
     this.$bus.$off('saveMindMap', this.saveCurrent)
+    this.$bus.$off('desktopNotice', this.onDesktopNotice)
     window.removeEventListener('keydown', this.onKeydownSave, true)
     if (window.__desktopDocumentData) {
       delete window.__desktopDocumentData
@@ -176,11 +179,26 @@ export default {
       this.saveCurrent()
     },
 
+    // 文本框还开着时，节点数据里仍是旧文字
+    commitActiveText() {
+      const textEdit =
+        this.mindMap && this.mindMap.renderer && this.mindMap.renderer.textEdit
+      if (textEdit) {
+        textEdit.hideEditTextBox()
+      }
+    },
+
+    onDesktopNotice(key) {
+      if (!key) return
+      this.$message.info(this.$t(`desktopNotice.${key}`))
+    },
+
     // 保存当前文件：桌面 App 写回原文件，浏览器写回文件库
     async saveCurrent() {
       if (!this.mindMap || this.screen !== 'edit') {
         return false
       }
+      this.commitActiveText()
       const data = this.documentData()
 
       // 1. 桌面 App
@@ -372,6 +390,7 @@ export default {
       this.previewTimer = null
       if (window.__TAURI_INTERNALS__ && window.__desktopSession) {
         if (this.mindMap && window.__desktopSession.path) {
+          this.commitActiveText()
           const data = this.documentData()
           window.__desktopSession.mindMapData = data
           const invoke = window.__TAURI_INTERNALS__.invoke

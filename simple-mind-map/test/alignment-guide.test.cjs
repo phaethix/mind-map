@@ -1,4 +1,5 @@
 const assert = require('assert')
+const fs = require('fs')
 const path = require('path')
 const Module = require('module')
 
@@ -110,6 +111,25 @@ async function main() {
   )
   assert.strictEqual(multi.guides[0].start, 50)
   assert.strictEqual(multi.guides[0].end, 420)
+
+  // 松手时用吸附后的坐标。鼠标还在原处，节点不能跳回去。
+  const { freeDragDropPoint } = await loadUtils()
+  assert.deepStrictEqual(
+    freeDragDropPoint({ x: 103, y: 50 }, { x: 100, y: 50 }),
+    { x: 100, y: 50 }
+  )
+  assert.deepStrictEqual(freeDragDropPoint({ x: 40, y: 70 }, null), {
+    x: 40,
+    y: 70
+  })
+
+  const dragSource = fs.readFileSync(
+    path.join(__dirname, '../src/plugins/Drag.js'),
+    'utf8'
+  )
+  assert.ok(dragSource.includes('const snappedPoint = this.freeDragPoint'))
+  assert.ok(dragSource.includes('freeDragDropPoint(cursor, snappedPoint)'))
+  assert.ok(dragSource.includes('this.mouseMoveX += dx * scaleX'))
 
   console.log('alignment guide ok')
 }

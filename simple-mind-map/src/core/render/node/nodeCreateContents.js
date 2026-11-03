@@ -12,6 +12,7 @@ import {
 import { Image as SVGImage, SVG, A, G, Rect, Text } from '@svgdotjs/svg.js'
 import iconsSvg from '../../../svg/icons'
 import { noneRichTextNodeLineHeight } from '../../../constants/constant'
+import { sanitizeRichText } from '../../../utils/sanitizeRichText'
 
 // 测量svg文本宽高
 const measureText = (text, style) => {
@@ -183,7 +184,7 @@ function createRichTextNode(specifyText) {
     div.style[prop] = value
   })
   div.style.lineHeight = 1.2
-  const html = `<div>${text}</div>`
+  const html = `<div>${sanitizeRichText(text)}</div>`
   div.innerHTML = html
   const el = div.children[0]
   el.classList.add('smm-richtext-node-wrap')

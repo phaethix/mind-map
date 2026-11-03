@@ -124,3 +124,11 @@ export const computeAlignmentGuide = (
   }
   return { dx, dy, guides }
 }
+
+// 松手时优先用拖动过程中吸附好的坐标。只拿鼠标位置的话，节点会从参考线上跳回去。
+export const freeDragDropPoint = (cursor, snapped) => {
+  if (snapped && Number.isFinite(snapped.x) && Number.isFinite(snapped.y)) {
+    return { x: snapped.x, y: snapped.y }
+  }
+  return { x: cursor.x, y: cursor.y }
+}

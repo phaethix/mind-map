@@ -52,6 +52,7 @@
         </el-popover>
         <span class="tbDivider"></span>
         <button
+          v-if="canDelete"
           type="button"
           class="tbBtn tbIcon tbDanger"
           :title="$t('hoverToolbar.delete')"
@@ -81,6 +82,7 @@
 <script>
 import { mapState } from 'vuex'
 import Color from './Color.vue'
+import { canDeleteHoveredNode } from '@/utils/hoverNode'
 
 // 画布悬停工具条：鼠标停在节点上就在它上方浮出一排操作，不必再去右侧面板
 export default {
@@ -108,6 +110,10 @@ export default {
 
     currentColor() {
       return (this.node && this.node.getStyle('color')) || '#1d1d1f'
+    },
+
+    canDelete() {
+      return canDeleteHoveredNode(this.node)
     }
   },
   created() {
@@ -243,7 +249,7 @@ export default {
 
     removeNode() {
       const node = this.node
-      if (!node || !this.mindMap) return
+      if (!canDeleteHoveredNode(node) || !this.mindMap) return
       this.hideNow()
       this.mindMap.execCommand('REMOVE_NODE', [node])
     }

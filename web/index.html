@@ -158,6 +158,9 @@
         if (window.$bus) {
           window.$bus.$emit('enterEditor')
           window.$bus.$emit('setData', session.mindMapData)
+          if (session.importNotice) {
+            window.$bus.$emit('desktopNotice', session.importNotice)
+          }
         }
       }
       window.__desktopShow = showDesktopDocument
@@ -186,9 +189,9 @@
             return
           }
           if (action === 'save') {
-            await invokeDesktop('save_mind_map', {
-              data: window.__desktopSession.mindMapData
-            })
+            if (window.$bus) {
+              window.$bus.$emit('saveMindMap')
+            }
             return
           }
           if (action === 'reveal') {
@@ -201,8 +204,15 @@
           } else if (action === 'open') {
             next = await invokeDesktop('open_file')
           } else if (action === 'save-as') {
+            const live =
+              typeof window.__desktopDocumentData === 'function'
+                ? window.__desktopDocumentData()
+                : null
+            if (live == null) {
+              return
+            }
             next = await invokeDesktop('save_file_as', {
-              data: window.__desktopSession.mindMapData
+              data: live
             })
           } else if (action === 'open-pending') {
             next = await invokeDesktop('take_pending_open')
@@ -243,6 +253,15 @@
           window.__bootLog(
             'initApp failed ' + (error && error.stack ? error.stack : error)
           )
+          return
+        }
+        try {
+          const pending = await invokeDesktop('take_pending_open')
+          if (pending) {
+            showDesktopDocument(pending)
+          }
+        } catch (error) {
+          reportDesktopError(error)
         }
       }
     </script>

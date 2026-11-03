@@ -32,6 +32,10 @@ cargo check --manifest-path desktop/src-tauri/Cargo.toml
 bun web/src/utils/fileLibrary.test.cjs
 bun web/src/utils/mermaidMindmap.test.cjs
 bun web/src/utils/githubStatus.test.cjs
+bun web/src/utils/editorGuards.test.cjs
+bun web/src/utils/desktopShell.test.cjs
+bun simple-mind-map/test/sanitize-rich-text.test.cjs
+cargo test --manifest-path desktop/src-tauri/Cargo.toml
 ```
 
 Use Node 20.11 or newer: the build toolchain relies on `import.meta.dirname`.

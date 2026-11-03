@@ -152,6 +152,7 @@ const AiChat = defineAsyncComponent(() => import('./AiChat.vue'))
 const MermaidEditor = defineAsyncComponent(() => import('./MermaidEditor.vue'))
 import MermaidOfficialView from './MermaidOfficialView.vue'
 import { globals } from '@/utils/global'
+import { shouldResetView } from '@/utils/documentView'
 import fallbackImage from '@/assets/img/图片加载失败.svg'
 
 // 注册插件
@@ -575,7 +576,9 @@ export default {
         this.mindMap.setData(data)
         rootNodeData = data
       }
-      this.mindMap.view.reset()
+      if (shouldResetView(data)) {
+        this.mindMap.view.reset()
+      }
       this.manualSave()
       // 如果导入的是富文本内容，那么自动开启富文本模式
       if (rootNodeData.data.richText && !this.openNodeRichText) {

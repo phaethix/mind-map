@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fs;
 use std::io::{Read, Write};
+#[cfg(not(debug_assertions))]
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -44,7 +45,13 @@ struct DesktopSession {
     mind_map_config: Value,
     lang: String,
     local_config: Value,
+    // 打开外部 xmind 时改存了一份副本，前端用这个键去翻译提示
+    #[serde(skip_serializing_if = "Option::is_none")]
+    import_notice: Option<String>,
 }
+
+// 文件在页面起来之前就被系统送进来时，AppState 可能还不存在
+static LAUNCH_OPEN: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 struct AppState {
     docs_dir: PathBuf,
@@ -80,8 +87,10 @@ fn normalize_document(value: Value) -> Value {
     value
 }
 
+#[cfg(not(debug_assertions))]
 const FRONTEND_PORT: u16 = 17321;
 
+#[cfg(not(debug_assertions))]
 fn start_frontend_server(app: AppHandle) -> Result<(), String> {
     let listener = TcpListener::bind(("127.0.0.1", FRONTEND_PORT)).map_err(|error| {
         format!("本机端口 {FRONTEND_PORT} 已被占用，请先关掉另一个 Mind 窗口：{error}")
@@ -100,6 +109,7 @@ fn start_frontend_server(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(debug_assertions))]
 fn serve_frontend(app: &AppHandle, stream: &mut TcpStream) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     let mut buffer = [0_u8; 4096];
@@ -235,7 +245,23 @@ fn read_document(path: &Path) -> Result<Value, String> {
     Ok(normalize_document(value))
 }
 
+fn is_zip(bytes: &[u8]) -> bool {
+    bytes.len() >= 4 && &bytes[..4] == b"PK\x03\x04"
+}
+
 fn write_document(path: &Path, data: &Value) -> Result<(), String> {
+    // 外部 xmind 读进来是有损的，直接写回会把批注、图片和其它页清掉
+    if is_xmind(path) && path.is_file() {
+        let bytes = fs::read(path).map_err(|error| error.to_string())?;
+        if is_zip(&bytes) {
+            match classify_xmind_bytes(&bytes)? {
+                XmindKind::Foreign | XmindKind::LegacyXml => {
+                    return Err("这是外部 xmind 文件，不能直接覆盖。请另存为。".to_string());
+                }
+                XmindKind::Native | XmindKind::Empty => {}
+            }
+        }
+    }
     if path.extension().and_then(|ext| ext.to_str()) == Some("xmind") {
         write_xmind(path, data)
     } else {
@@ -364,9 +390,28 @@ fn write_xmind(path: &Path, data: &Value) -> Result<(), String> {
     }
     zip.finish().map_err(|error| error.to_string())?;
     let bytes = cursor.into_inner();
-    let tmp = path.with_extension("xmind.tmp");
-    fs::write(&tmp, &bytes).map_err(|error| error.to_string())?;
-    fs::rename(&tmp, path).map_err(|error| error.to_string())
+    // 自动保存和 Gist 同步会同时写同一个文件，固定的 .xmind.tmp 会互相踩掉
+    let tmp = temp_xmind_path(path);
+    if let Err(error) = fs::write(&tmp, &bytes) {
+        return Err(error.to_string());
+    }
+    if let Err(error) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(error.to_string());
+    }
+    Ok(())
+}
+
+fn temp_xmind_path(path: &Path) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let name = path
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "mind.xmind".to_string());
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    parent.join(format!(".{name}.{}.{n}.tmp", std::process::id()))
 }
 
 fn read_zip_file(
@@ -473,6 +518,16 @@ fn xmind_content_to_document(content: &Value) -> Value {
 }
 
 fn read_xmind_bytes(bytes: &[u8]) -> Result<Value, String> {
+    match classify_xmind_bytes(bytes)? {
+        XmindKind::LegacyXml => {
+            return Err(
+                "这是 XMind 8 的文件（content.xml），当前还不能打开。请先在 XMind 里另存为新版格式。"
+                    .to_string(),
+            );
+        }
+        XmindKind::Empty => return Err("xmind 文件里没有内容".to_string()),
+        XmindKind::Native | XmindKind::Foreign => {}
+    }
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))
         .map_err(|error| error.to_string())?;
     if let Some(mind) = read_zip_file(&mut archive, "mind.json") {
@@ -484,7 +539,120 @@ fn read_xmind_bytes(bytes: &[u8]) -> Result<Value, String> {
     Ok(xmind_content_to_document(&content))
 }
 
-fn session_view(session: &SessionFile, document: Value) -> DesktopSession {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum XmindKind {
+    Native,
+    Foreign,
+    LegacyXml,
+    Empty,
+}
+
+fn classify_xmind_bytes(bytes: &[u8]) -> Result<XmindKind, String> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))
+        .map_err(|error| error.to_string())?;
+    if archive.by_name("mind.json").is_ok() {
+        return Ok(XmindKind::Native);
+    }
+    if archive.by_name("content.json").is_ok() {
+        return Ok(XmindKind::Foreign);
+    }
+    if archive.by_name("content.xml").is_ok() {
+        return Ok(XmindKind::LegacyXml);
+    }
+    Ok(XmindKind::Empty)
+}
+
+#[derive(Debug)]
+struct PreparedOpen {
+    path: PathBuf,
+    document: Value,
+    notice: Option<String>,
+}
+
+fn prepare_open(path: PathBuf) -> Result<PreparedOpen, String> {
+    if !path.exists() {
+        let document = create_document(&path)?;
+        return Ok(PreparedOpen {
+            path,
+            document,
+            notice: None,
+        });
+    }
+    let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+    if is_zip(&bytes) {
+        return prepare_xmind(path, &bytes);
+    }
+    let value = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    Ok(PreparedOpen {
+        path,
+        document: normalize_document(value),
+        notice: None,
+    })
+}
+
+fn prepare_xmind(path: PathBuf, bytes: &[u8]) -> Result<PreparedOpen, String> {
+    match classify_xmind_bytes(bytes)? {
+        XmindKind::Native => Ok(PreparedOpen {
+            path,
+            document: normalize_document(read_xmind_bytes(bytes)?),
+            notice: None,
+        }),
+        XmindKind::Foreign => {
+            let document = normalize_document(read_xmind_bytes(bytes)?);
+            let parent = path.parent().unwrap_or_else(|| Path::new("."));
+            let copy = claim_imported_copy(parent, &path)?;
+            if let Err(error) = write_document(&copy, &document) {
+                let _ = fs::remove_file(&copy);
+                return Err(error);
+            }
+            Ok(PreparedOpen {
+                path: copy,
+                document,
+                notice: Some("foreignXmind".to_string()),
+            })
+        }
+        XmindKind::LegacyXml => Err(
+            "这是 XMind 8 的文件（content.xml），当前还不能打开。请先在 XMind 里另存为新版格式。"
+                .to_string(),
+        ),
+        XmindKind::Empty => Err("xmind 文件里没有内容".to_string()),
+    }
+}
+
+fn claim_imported_copy(dir: &Path, source: &Path) -> Result<PathBuf, String> {
+    let stem = source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("导入");
+    let mut names = vec![format!("{stem} (Mind).xmind")];
+    for index in 2..1000 {
+        names.push(format!("{stem} (Mind) {index}.xmind"));
+    }
+    for name in names {
+        let path = dir.join(name);
+        if path == source {
+            continue;
+        }
+        // create_new 占住这个名字，避免两次打开选中同一个已有导图再覆盖它
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(_) => return Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Err("无法创建副本".to_string())
+}
+
+fn session_view(
+    session: &SessionFile,
+    document: Value,
+    import_notice: Option<String>,
+) -> DesktopSession {
     let path = PathBuf::from(&session.current_path);
     DesktopSession {
         file_name: file_name_of(&path),
@@ -493,21 +661,18 @@ fn session_view(session: &SessionFile, document: Value) -> DesktopSession {
         mind_map_config: session.mind_map_config.clone(),
         lang: session.lang.clone(),
         local_config: session.local_config.clone(),
+        import_notice,
     }
 }
 
 fn switch_to(state: &AppState, app: &AppHandle, path: PathBuf) -> Result<DesktopSession, String> {
-    let document = if path.exists() {
-        read_document(&path)?
-    } else {
-        create_document(&path)?
-    };
+    let prepared = prepare_open(path)?;
     let mut session = state.session.lock().map_err(|error| error.to_string())?;
-    let current = path.to_string_lossy().into_owned();
+    let current = prepared.path.to_string_lossy().into_owned();
     session.current_path = current.clone();
     remember_recent(&mut session, &current);
     persist_session(state, &session)?;
-    let view = session_view(&session, document);
+    let view = session_view(&session, prepared.document, prepared.notice);
     set_window_title(app, &view.file_name);
     Ok(view)
 }
@@ -638,8 +803,21 @@ fn file_card(state: &AppState, path: &Path) -> FileCard {
     }
 }
 
+fn extension_is(path: &Path, expected: &str) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case(expected))
+        .unwrap_or(false)
+}
+
 fn is_xmind(path: &Path) -> bool {
-    path.extension().and_then(|ext| ext.to_str()) == Some("xmind")
+    extension_is(path, "xmind")
+}
+
+// 对话框还能打开旧的 .smm / .json。这些只能是当前或最近打开过的文件，
+// 不能因为落在文档目录里就放行（github.json 也在那里）。
+fn is_session_document(path: &Path) -> bool {
+    is_xmind(path) || extension_is(path, "smm") || extension_is(path, "json")
 }
 
 // —— 平台相关的系统调用 ——
@@ -836,6 +1014,7 @@ fn bootstrap(state: State<AppState>) -> Result<DesktopSession, String> {
         mind_map_config: session.mind_map_config.clone(),
         lang: session.lang.clone(),
         local_config: session.local_config.clone(),
+        import_notice: None,
     })
 }
 
@@ -895,7 +1074,7 @@ fn save_file_as(
     session.current_path = current.clone();
     remember_recent(&mut session, &current);
     persist_session(&state, &session)?;
-    let view = session_view(&session, data);
+    let view = session_view(&session, data, None);
     set_window_title(&app, &view.file_name);
     Ok(Some(view))
 }
@@ -959,6 +1138,40 @@ struct LibraryListing {
 // 前端传来的路径一律限制在文档目录内，防止误操作到别处
 fn docs_root(state: &AppState) -> Result<PathBuf, String> {
     fs::canonicalize(&state.docs_dir).map_err(|error| error.to_string())
+}
+
+fn path_matches(stored: &str, raw: &str, canonical: &Path) -> bool {
+    if stored == raw || stored == canonical.to_string_lossy() {
+        return true;
+    }
+    fs::canonicalize(Path::new(stored)).ok().as_deref() == Some(canonical)
+}
+
+// 删除、重命名、按路径打开只允许文档目录里的 xmind，或会话里已经打开过的文件
+fn allowed_document(state: &AppState, raw: &str) -> Result<PathBuf, String> {
+    let canonical = fs::canonicalize(Path::new(raw)).map_err(|_| "路径不存在".to_string())?;
+    if !canonical.is_file() || !is_session_document(&canonical) {
+        return Err("只能操作 xmind 文件".to_string());
+    }
+    let root = docs_root(state)?;
+    if canonical.starts_with(&root) && is_xmind(&canonical) {
+        return Ok(canonical);
+    }
+    let session = state.session.lock().map_err(|error| error.to_string())?;
+    let mut candidates = session.recent.clone();
+    if !session.current_path.is_empty() {
+        candidates.push(session.current_path.clone());
+    }
+    let allowed = candidates
+        .iter()
+        .any(|item| path_matches(item, raw, &canonical));
+    if allowed {
+        Ok(canonical)
+    } else if is_xmind(&canonical) {
+        Err("路径不在文档目录内".to_string())
+    } else {
+        Err("只能操作 xmind 文件".to_string())
+    }
 }
 
 fn canonical_inside(root: &Path, path: &Path) -> Result<PathBuf, String> {
@@ -1318,7 +1531,8 @@ fn open_path(
     state: State<AppState>,
     path: String,
 ) -> Result<DesktopSession, String> {
-    switch_to(&state, &app, PathBuf::from(path))
+    let canonical = allowed_document(&state, &path)?;
+    switch_to(&state, &app, canonical)
 }
 
 #[tauri::command]
@@ -1328,7 +1542,7 @@ fn rename_file(
     path: String,
     name: String,
 ) -> Result<FileCard, String> {
-    let source = PathBuf::from(&path);
+    let source = allowed_document(&state, &path)?;
     let trimmed = name.trim();
     if trimmed.is_empty() || trimmed.contains('/') || trimmed.contains('\\') {
         return Err("名称无效".to_string());
@@ -1352,11 +1566,11 @@ fn rename_file(
     }
     let dest_text = dest.to_string_lossy().into_owned();
     let mut session = state.session.lock().map_err(|error| error.to_string())?;
-    if session.current_path == path {
+    if path_matches(&session.current_path, &path, &source) {
         session.current_path = dest_text.clone();
     }
     for item in session.recent.iter_mut() {
-        if item == &path {
+        if path_matches(item, &path, &source) {
             *item = dest_text.clone();
         }
     }
@@ -1372,17 +1586,17 @@ fn rename_file(
 
 #[tauri::command]
 fn delete_file(state: State<AppState>, path: String) -> Result<(), String> {
-    let source = PathBuf::from(&path);
-    if source.exists() {
-        move_to_trash(&source)?;
-    }
+    let source = allowed_document(&state, &path)?;
+    move_to_trash(&source)?;
     let thumb = thumbnail_file(&state, &path);
     if thumb.exists() {
         let _ = fs::remove_file(thumb);
     }
     let mut session = state.session.lock().map_err(|error| error.to_string())?;
-    session.recent.retain(|item| item != &path);
-    if session.current_path == path {
+    session
+        .recent
+        .retain(|item| !path_matches(item, &path, &source));
+    if path_matches(&session.current_path, &path, &source) {
         session.current_path.clear();
     }
     persist_session(&state, &session)?;
@@ -1421,12 +1635,7 @@ fn take_pending_open(
     app: AppHandle,
     state: State<AppState>,
 ) -> Result<Option<DesktopSession>, String> {
-    let pending = state
-        .pending_open
-        .lock()
-        .map_err(|error| error.to_string())?
-        .take();
-    let Some(path) = pending else {
+    let Some(path) = consume_open_request(&state.pending_open, &LAUNCH_OPEN) else {
         return Ok(None);
     };
     switch_to(&state, &app, path).map(Some)
@@ -1919,6 +2128,50 @@ async fn github_list_gists(app: AppHandle) -> Result<Vec<github::GistSummary>, S
     github::list_gists(&github_app_dir(&app)?).await
 }
 
+fn remember_launch_open(path: PathBuf) {
+    if let Ok(mut slot) = LAUNCH_OPEN.lock() {
+        *slot = Some(path);
+    }
+}
+
+fn consume_open_request(
+    pending: &Mutex<Option<PathBuf>>,
+    launch: &Mutex<Option<PathBuf>>,
+) -> Option<PathBuf> {
+    if let Ok(mut slot) = pending.lock() {
+        if let Some(path) = slot.take() {
+            if let Ok(mut extra) = launch.lock() {
+                extra.take();
+            }
+            return Some(path);
+        }
+    }
+    launch.lock().ok().and_then(|mut slot| slot.take())
+}
+
+fn launch_document_from_args<I, S>(args: I) -> Option<PathBuf>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter().find_map(|arg| {
+        let text = arg.as_ref();
+        if text.starts_with('-') {
+            return None;
+        }
+        let path = PathBuf::from(text);
+        let ext = path.extension().and_then(|ext| ext.to_str());
+        let document = ext
+            .map(|ext| ext.eq_ignore_ascii_case("xmind") || ext.eq_ignore_ascii_case("smm"))
+            .unwrap_or(false);
+        if document && path.is_file() {
+            Some(path)
+        } else {
+            None
+        }
+    })
+}
+
 fn dispatch_menu(app: &AppHandle, action: &str) {
     if let Some(window) = app.get_webview_window("main") {
         let script = format!("window.__desktopOnMenu && window.__desktopOnMenu({action:?})");
@@ -1935,6 +2188,7 @@ fn handle_run_event(app: &AppHandle, event: tauri::RunEvent) {
             let Ok(path) = url.to_file_path() else {
                 continue;
             };
+            remember_launch_open(path.clone());
             if let Some(state) = app.try_state::<AppState>() {
                 if let Ok(mut pending) = state.pending_open.lock() {
                     *pending = Some(path);
@@ -1960,6 +2214,16 @@ pub fn run() {
         })
         .setup(|app| {
             let state = initial_state(app.handle()).map_err(std::io::Error::other)?;
+            // Windows / Linux 没有 Opened 事件，冷启动时文件在命令行参数里
+            #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+            if let Some(path) = launch_document_from_args(std::env::args().skip(1)) {
+                remember_launch_open(path.clone());
+                if let Ok(mut pending) = state.pending_open.lock() {
+                    if pending.is_none() {
+                        *pending = Some(path);
+                    }
+                }
+            }
             app.manage(state);
             // 首页没有文档时也不显示应用名：菜单栏里已经有了
             #[cfg(target_os = "macos")]
@@ -2025,4 +2289,180 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to start Mind")
         .run(handle_run_event);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::fs;
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn scratch(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let dir =
+            std::env::temp_dir().join(format!("mind-map-{name}-{}-{nanos}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn zip_bytes(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        let mut archive = zip::ZipWriter::new(&mut cursor);
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, bytes) in files {
+            archive.start_file(*name, options).unwrap();
+            archive.write_all(bytes).unwrap();
+        }
+        archive.finish().unwrap();
+        cursor.into_inner()
+    }
+
+    fn test_state(dir: &Path) -> AppState {
+        AppState {
+            docs_dir: dir.to_path_buf(),
+            session_path: dir.join("session.json"),
+            session: Mutex::new(SessionFile {
+                current_path: String::new(),
+                lang: "zh".into(),
+                mind_map_config: json!({}),
+                local_config: json!({}),
+                recent: Vec::new(),
+            }),
+            pending_open: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn foreign_xmind_is_copied_and_original_kept() {
+        let dir = scratch("foreign");
+        let source = dir.join("Report.xmind");
+        let note = br#"[{"rootTopic":{"id":"root","title":"T","notes":{"plain":{"content":"secret"}},"children":{"attached":[]}}}]"#;
+        let bytes = zip_bytes(&[("content.json", note)]);
+        fs::write(&source, &bytes).unwrap();
+
+        let prepared = prepare_open(source.clone()).unwrap();
+        assert_ne!(prepared.path, source);
+        assert_eq!(prepared.notice.as_deref(), Some("foreignXmind"));
+        assert!(prepared.path.ends_with("Report (Mind).xmind"));
+        assert_eq!(fs::read(&source).unwrap(), bytes);
+
+        let err = write_document(&source, &prepared.document).unwrap_err();
+        assert!(err.contains("不能直接覆盖"));
+        assert_eq!(fs::read(&source).unwrap(), bytes);
+        assert!(
+            classify_xmind_bytes(&fs::read(&prepared.path).unwrap()).unwrap() == XmindKind::Native
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn xmind8_is_not_reported_as_empty() {
+        let dir = scratch("legacy");
+        let source = dir.join("old.xmind");
+        fs::write(&source, zip_bytes(&[("content.xml", b"<xmap-content/>")])).unwrap();
+        let err = prepare_open(source).unwrap_err();
+        assert!(err.contains("XMind 8"));
+        assert!(!err.contains("没有内容"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn native_xmind_opens_in_place() {
+        let dir = scratch("native");
+        let path = dir.join("native.xmind");
+        write_document(&path, &empty_document()).unwrap();
+        let prepared = prepare_open(path.clone()).unwrap();
+        assert_eq!(prepared.path, path);
+        assert!(prepared.notice.is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn temp_xmind_paths_do_not_collide() {
+        let path = Path::new("未命名.xmind");
+        let first = temp_xmind_path(path);
+        let second = temp_xmind_path(path);
+        assert_ne!(first, second);
+        assert_ne!(first, path.with_extension("xmind.tmp"));
+        assert_ne!(second, path.with_extension("xmind.tmp"));
+    }
+
+    #[test]
+    fn file_commands_stay_inside_documents_or_recent() {
+        let dir = scratch("paths");
+        let state = test_state(&dir);
+        let inside = dir.join("a.xmind");
+        write_document(&inside, &empty_document()).unwrap();
+        assert!(allowed_document(&state, &inside.to_string_lossy()).is_ok());
+
+        let notes = dir.join("github.json");
+        fs::write(&notes, b"{\"accessToken\":\"secret\"}").unwrap();
+        let rejected = allowed_document(&state, &notes.to_string_lossy()).unwrap_err();
+        assert!(rejected.contains("xmind"));
+
+        let outside = scratch("outside").join("other.xmind");
+        write_document(&outside, &empty_document()).unwrap();
+        assert!(allowed_document(&state, &outside.to_string_lossy()).is_err());
+        state
+            .session
+            .lock()
+            .unwrap()
+            .recent
+            .push(outside.to_string_lossy().into_owned());
+        assert!(allowed_document(&state, &outside.to_string_lossy()).is_ok());
+
+        let legacy = scratch("legacy-json").join("notes.json");
+        fs::write(&legacy, b"{}").unwrap();
+        assert!(allowed_document(&state, &legacy.to_string_lossy()).is_err());
+        state.session.lock().unwrap().current_path = legacy.to_string_lossy().into_owned();
+        assert!(allowed_document(&state, &legacy.to_string_lossy()).is_ok());
+
+        let upper = dir.join("Map.XMIND");
+        write_document(&upper, &empty_document()).unwrap();
+        assert!(allowed_document(&state, &upper.to_string_lossy()).is_ok());
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(legacy.parent().unwrap());
+        let _ = fs::remove_dir_all(outside.parent().unwrap());
+    }
+
+    #[test]
+    fn launch_args_pick_a_document() {
+        let dir = scratch("launch");
+        let path = dir.join("open-me.xmind");
+        write_document(&path, &empty_document()).unwrap();
+        let text = path.to_string_lossy().into_owned();
+        assert_eq!(
+            launch_document_from_args(["--flag", text.as_str()]).as_deref(),
+            Some(path.as_path())
+        );
+        assert!(launch_document_from_args(["--help"]).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pending_open_survives_until_the_page_reads_it() {
+        let pending = Mutex::new(Some(PathBuf::from("from-event.xmind")));
+        let launch = Mutex::new(Some(PathBuf::from("from-event.xmind")));
+        assert_eq!(
+            consume_open_request(&pending, &launch),
+            Some(PathBuf::from("from-event.xmind"))
+        );
+        assert!(pending.lock().unwrap().is_none());
+        assert!(launch.lock().unwrap().is_none());
+
+        let pending = Mutex::new(None);
+        let launch = Mutex::new(Some(PathBuf::from("early.xmind")));
+        assert_eq!(
+            consume_open_request(&pending, &launch),
+            Some(PathBuf::from("early.xmind"))
+        );
+    }
 }

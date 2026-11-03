@@ -117,6 +117,12 @@ export default defineConfig(({ command }) => ({
       {
         find: 'simple-mind-map/example',
         replacement: path.resolve(__dirname, '../simple-mind-map/example')
+      },
+      // 包名本身也指向仓库里的引擎。否则核心从 node_modules 的旧副本加载，
+      // 这里改过的节点渲染不会进编辑器。
+      {
+        find: /^simple-mind-map$/,
+        replacement: path.resolve(__dirname, '../simple-mind-map/index.js')
       }
     ]
   },

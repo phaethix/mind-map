@@ -40,6 +40,12 @@
     },
     "fileAssociations": [
       {
+        "ext": ["xmind"],
+        "name": "Mind",
+        "mimeType": "application/vnd.xmind.xmind",
+        "role": "Editor"
+      },
+      {
         "ext": ["smm"],
         "name": "Mind",
         "mimeType": "application/json",

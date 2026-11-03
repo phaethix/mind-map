@@ -1,4 +1,5 @@
 const assert = require('assert')
+const fs = require('fs')
 const path = require('path')
 const Module = require('module')
 
@@ -44,7 +45,8 @@ async function main() {
     getStraightHandles,
     getStraightAxis,
     getLineCornerRadius,
-    isFreeEndPoint
+    isFreeEndPoint,
+    previewAssociativeLinePath
   } = await loadUtils()
 
   // 端点被拖到任意位置后不再跟着节点走：只认 x/y，没有 dir
@@ -163,6 +165,44 @@ async function main() {
   const back = getStraightLinePath({ x: 100, y: 100 }, { x: 0, y: 0 }, 12)
   assert.ok(back.startsWith('M100,100'))
   assert.ok(back.endsWith('L0,0'))
+
+  // 拖动手柄时的预览必须跟真正渲染用同一套形状，不能一律画成圆角折线
+  assert.strictEqual(
+    previewAssociativeLinePath('line', start, end, null, null),
+    'M0,0 L200,100'
+  )
+  assert.strictEqual(
+    previewAssociativeLinePath('sharp', start, end, null, null),
+    getStraightLinePath(start, end, 0)
+  )
+  assert.strictEqual(
+    previewAssociativeLinePath('elbow', start, end, null, null),
+    getStraightLinePath(start, end, 12)
+  )
+  assert.notStrictEqual(
+    previewAssociativeLinePath('sharp', start, end, null, null),
+    previewAssociativeLinePath('elbow', start, end, null, null)
+  )
+  assert.ok(
+    previewAssociativeLinePath('curve', start, end, { x: 100, y: 0 }, { x: 100, y: 100 }).includes(
+      'C'
+    )
+  )
+
+  const controls = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../src/plugins/associativeLine/associativeLineControls.js'
+    ),
+    'utf8'
+  )
+  const hide = controls.slice(
+    controls.indexOf('function hideControls'),
+    controls.indexOf('function showControls')
+  )
+  assert.ok(hide.includes('startPointHandle'), hide)
+  assert.ok(hide.includes('endPointHandle'), hide)
+  assert.ok(!/if\s*\(\s*!this\.controlLine1\s*\)\s*return/.test(hide), hide)
 
   console.log('associative line path ok')
 }

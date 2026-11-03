@@ -86,6 +86,14 @@ async function main() {
     { top: 10, bottom: 10 }
   )
 
+  // 并排的兄弟不算上下方：组织架构图里三个子节点 top 相同，
+  // 中间那个外框不能把上下留白压成 0
+  const side = (left, top) => ({ left, top, width: 80, height: 40 })
+  assert.deepStrictEqual(
+    clampOuterFramePadding(side(200, 100), side(0, 100), side(400, 100), 10),
+    { top: 10, bottom: 10 }
+  )
+
   // 自己还没渲染时同样保持默认值
   assert.deepStrictEqual(
     clampOuterFramePadding(

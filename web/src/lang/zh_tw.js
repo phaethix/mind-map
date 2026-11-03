@@ -676,5 +676,9 @@ export default {
     statusOff: 'GitHub 未登入',
     statusOn: "GitHub · {'@'}{login}",
     noLink: '目前的導圖沒有關聯的 Gist'
+  },
+  desktopNotice: {
+    foreignXmind:
+      '這是外部 XMind 檔案，已另存成一份 Mind 副本，原始檔案沒有被改動。'
   }
 }

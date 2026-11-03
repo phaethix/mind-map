@@ -10,6 +10,15 @@ const isFiniteRect = rect => {
   )
 }
 
+// 水平方向没有重叠，说明这个兄弟在旁边而不是上下
+const separatedHorizontally = (a, b) => {
+  if (!Number.isFinite(a.left) || !Number.isFinite(a.width)) return false
+  if (!Number.isFinite(b.left) || !Number.isFinite(b.width)) return false
+  const aRight = a.left + a.width
+  const bRight = b.left + b.width
+  return aRight <= b.left || bRight <= a.left
+}
+
 // 外框的上下留白不能越过相邻兄弟节点：兄弟之间的空隙有限，
 // 留白超过空隙的一半就会压到隔壁的文字上，所以按空隙的一半封顶。
 export const clampOuterFramePadding = (
@@ -23,11 +32,12 @@ export const clampOuterFramePadding = (
     bottom: paddingY
   }
   if (isFiniteRect(rect)) {
-    if (isFiniteRect(aboveRect)) {
+    // 左右并排的兄弟没有垂直方向的空隙，不能拿来压上下留白
+    if (isFiniteRect(aboveRect) && !separatedHorizontally(rect, aboveRect)) {
       const gap = rect.top - (aboveRect.top + aboveRect.height)
       res.top = Math.min(res.top, Math.max(gap / 2, 0))
     }
-    if (isFiniteRect(belowRect)) {
+    if (isFiniteRect(belowRect) && !separatedHorizontally(rect, belowRect)) {
       const gap = belowRect.top - (rect.top + rect.height)
       res.bottom = Math.min(res.bottom, Math.max(gap / 2, 0))
     }

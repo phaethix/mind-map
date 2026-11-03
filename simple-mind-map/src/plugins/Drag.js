@@ -8,7 +8,10 @@ import {
 import Base from '../layouts/Base'
 import { CONSTANTS } from '../constants/constant'
 import AutoMove from '../utils/AutoMove'
-import { computeAlignmentGuide } from './alignmentGuide/alignmentGuideUtils'
+import {
+  computeAlignmentGuide,
+  freeDragDropPoint
+} from './alignmentGuide/alignmentGuideUtils'
 
 // 节点拖动插件
 class Drag extends Base {
@@ -58,6 +61,8 @@ class Drag extends Base {
     this.mouseDownX = 0
     this.mouseDownY = 0
     this.mouseMoveX = 0
+    // 自由拖拽时替身吸附后的画布坐标，松手要用它而不是鼠标位置
+    this.freeDragPoint = null
     this.mouseMoveY = 0
     // 鼠标移动的距离距鼠标按下的位置距离多少以上才认为是拖动事件
     this.checkDragOffset = 10
@@ -97,6 +102,7 @@ class Drag extends Base {
       return
     }
     this.isMousedown = true
+    this.freeDragPoint = null
     // 记录鼠标按下时的节点
     this.mousedownNode = node
     // 记录鼠标按下的坐标
@@ -139,6 +145,8 @@ class Drag extends Base {
       this.autoMove.clearAutoMoveTimer()
     }
     this.isMousedown = false
+    // beforeDragEnd 会让出事件循环，期间新的拖拽不能改掉这一次的落点
+    const snappedPoint = this.freeDragPoint
     // 恢复被拖拽节点的临时设置
     this.beingDragNodeList.forEach(node => {
       node.setOpacity(1)
@@ -186,11 +194,12 @@ class Drag extends Base {
         this.nextNode
       )
     } else if (
-      this.clone &&
       enableFreeDrag &&
-      this.beingDragNodeList.length === 1
+      this.beingDragNodeList.length === 1 &&
+      (this.clone || snappedPoint)
     ) {
-      // 如果只拖拽了一个节点，那么设置自定义位置
+      // 如果只拖拽了一个节点，那么设置自定义位置。
+      // 吸附过的话用替身的坐标，鼠标本身还停在吸附前的位置。
       let { x, y } = this.mindMap.toPos(
         e.clientX - this.offsetX,
         e.clientY - this.offsetY
@@ -198,6 +207,10 @@ class Drag extends Base {
       let { scaleX, scaleY, translateX, translateY } = this.drawTransform
       x = (x - translateX) / scaleX
       y = (y - translateY) / scaleY
+      const cursor = { x, y }
+      const dropped = freeDragDropPoint(cursor, snappedPoint)
+      x = dropped.x
+      y = dropped.y
       this.mousedownNode.left = x
       this.mousedownNode.top = y
       this.mousedownNode.customLeft = x
@@ -249,7 +262,17 @@ class Drag extends Base {
       )
       x += dx
       y += dy
+      // 命中检测读的是鼠标坐标。替身被吸走之后，检测也要跟着走，
+      // 否则光标还停在兄弟节点上，松手会被插回树里。
+      this.mouseMoveX += dx * scaleX
+      this.mouseMoveY += dy * scaleY
       this.renderAlignmentGuide(guides)
+    }
+    if (
+      this.mindMap.opt.enableFreeDrag &&
+      this.beingDragNodeList.length === 1
+    ) {
+      this.freeDragPoint = { x, y }
     }
     let t = this.clone.transform()
     this.clone.translate(x - t.translateX, y - t.translateY)

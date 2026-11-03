@@ -3,6 +3,7 @@ import { simpleDeepClone } from 'simple-mind-map/src/utils/index'
 import vuexStore from '@/store'
 import { browserFileLibrary } from '@/utils/fileLibrary'
 import { globals } from '@/utils/global'
+import { isQuotaExceededError } from '@/utils/storageError'
 
 const SIMPLE_MIND_MAP_DATA = 'SIMPLE_MIND_MAP_DATA'
 const SIMPLE_MIND_MAP_CONFIG = 'SIMPLE_MIND_MAP_CONFIG'
@@ -112,7 +113,7 @@ export const storeData = data => {
     }
   } catch (error) {
     console.log(error)
-    if ('exceeded') {
+    if (isQuotaExceededError(error)) {
       globals.bus.$emit('localStorageExceeded')
     }
   }

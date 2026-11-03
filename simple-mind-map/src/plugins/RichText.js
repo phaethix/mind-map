@@ -15,6 +15,7 @@ import {
 import { richTextSupportStyleList } from '../constants/constant'
 import MindMapNode from '../core/render/node/MindMapNode'
 import { Scope } from 'parchment'
+import { sanitizeRichText } from '../utils/sanitizeRichText'
 
 let extended = false
 
@@ -293,10 +294,12 @@ class RichText {
       // 还不是富文本
       let text = String(nodeText).split(/\n/gim).join('<br>')
       let html = `<p>${text}</p>`
-      this.textEditNode.innerHTML = this.cacheEditingText || html
+      this.textEditNode.innerHTML = sanitizeRichText(this.cacheEditingText || html)
     } else {
       // 已经是富文本
-      this.textEditNode.innerHTML = this.cacheEditingText || nodeText
+      this.textEditNode.innerHTML = sanitizeRichText(
+        this.cacheEditingText || nodeText || ''
+      )
     }
     this.initQuillEditor()
     this.setQuillContainerMinHeight(originHeight)

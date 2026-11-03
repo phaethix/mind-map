@@ -697,5 +697,9 @@ export default {
     statusOff: 'GitHub: signed out',
     statusOn: "GitHub · {'@'}{login}",
     noLink: 'This map has no linked Gist'
+  },
+  desktopNotice: {
+    foreignXmind:
+      'This is an external XMind file. A Mind copy was saved so the original stays unchanged.'
   }
 }

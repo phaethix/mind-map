@@ -8,6 +8,7 @@ import MersenneTwister from './mersenneTwister'
 import { ForeignObject } from '@svgdotjs/svg.js'
 import merge from 'deepmerge'
 import { lineStyleProps } from '../theme/default'
+import { sanitizeRichText } from './sanitizeRichText'
 
 //  深度优先遍历树
 export const walk = (
@@ -433,7 +434,7 @@ export const getTextFromHtml = html => {
   if (!getTextFromHtmlEl) {
     getTextFromHtmlEl = document.createElement('div')
   }
-  getTextFromHtmlEl.innerHTML = html
+  getTextFromHtmlEl.innerHTML = sanitizeRichText(html)
   return getTextFromHtmlEl.textContent
 }
 
@@ -674,7 +675,7 @@ export const nodeRichTextToTextWithWrap = html => {
   if (!nodeRichTextToTextWithWrapEl) {
     nodeRichTextToTextWithWrapEl = document.createElement('div')
   }
-  nodeRichTextToTextWithWrapEl.innerHTML = html
+  nodeRichTextToTextWithWrapEl.innerHTML = sanitizeRichText(html)
   const childNodes = nodeRichTextToTextWithWrapEl.childNodes
   let res = ''
   for (let i = 0; i < childNodes.length; i++) {

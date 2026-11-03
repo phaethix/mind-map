@@ -695,5 +695,9 @@ export default {
     statusOff: 'GitHub chưa đăng nhập',
     statusOn: "GitHub · {'@'}{login}",
     noLink: 'Sơ đồ hiện tại chưa có Gist liên kết'
+  },
+  desktopNotice: {
+    foreignXmind:
+      'Đây là tệp XMind bên ngoài. Đã lưu một bản sao Mind để giữ nguyên tệp gốc.'
   }
 }

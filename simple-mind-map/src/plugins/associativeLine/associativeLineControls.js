@@ -2,13 +2,11 @@ import { bfsWalk } from '../../utils'
 import {
   getAssociativeLineTargetIndex,
   computeCubicBezierPathPoints,
-  joinCubicBezierPath,
   getNodePoint,
   getDefaultControlPointOffsets,
-  getStraightLinePath,
   getStraightLineMid,
   getStraightHandles,
-  getLineCornerRadius
+  previewAssociativeLinePath
 } from './associativeLineUtils'
 
 // 创建控制点、连线节点
@@ -229,17 +227,15 @@ function updataAassociativeLine(
   point2,
   activeLine
 ) {
-  const [path, clickPath, text, node] = activeLine
-  // 更新关联线
-  const pathStr =
-    this.getLineShape(node) !== 'curve'
-      ? getStraightLinePath(
-          startPoint,
-          endPoint,
-          12,
-          getStraightLineMid(startPoint, endPoint, point1, point2)
-        )
-      : joinCubicBezierPath(startPoint, endPoint, point1, point2)
+  const [path, clickPath, text, node, toNode] = activeLine
+  // 更新关联线。预览和松手后的正式路径用同一套形状，避免直角和直线被画成圆角。
+  const pathStr = previewAssociativeLinePath(
+    this.getLineShape(node, toNode),
+    startPoint,
+    endPoint,
+    point1,
+    point2
+  )
   path.plot(pathStr)
   clickPath.plot(pathStr)
   this.updateTextPos(path, text)
@@ -307,6 +303,46 @@ function onControlPointMouseup(e) {
     } else {
       list[index].endPoint = point
     }
+    // 这次 data_change 会跳过整图重绘，所以吸附后的端点要当场画上去，
+    // 否则箭头还停在节点里面，要点一下画布才跳到边上。
+    const snappedStart = isStart ? point : startPoint
+    const snappedEnd = isStart ? endPoint : point
+    const handleRadius = this.controlPointDiameter / 2
+    this[this.mousedownControlPointKey]
+      .x(point.x - handleRadius)
+      .y(point.y - handleRadius)
+    // 折弯用已经保存的偏移，不要换成默认曲线，否则松手后肘线会先鼓一下
+    const savedOffsets = (
+      sourceNode.getData('associativeLineTargetControlOffsets') || []
+    )[index]
+    let point1 = null
+    let point2 = null
+    if (savedOffsets && savedOffsets.length === 2) {
+      point1 = {
+        x: snappedStart.x + savedOffsets[0].x,
+        y: snappedStart.y + savedOffsets[0].y
+      }
+      point2 = {
+        x: snappedEnd.x + savedOffsets[1].x,
+        y: snappedEnd.y + savedOffsets[1].y
+      }
+    } else {
+      const preview = computeCubicBezierPathPoints(
+        snappedStart.x,
+        snappedStart.y,
+        snappedEnd.x,
+        snappedEnd.y
+      )
+      point1 = preview[0]
+      point2 = preview[1]
+    }
+    this.updataAassociativeLine(
+      snappedStart,
+      snappedEnd,
+      point1,
+      point2,
+      this.activeLine
+    )
     this.mindMap.execCommand('SET_NODE_DATA', sourceNode, {
       associativeLinePoint: list
     })
@@ -408,29 +444,35 @@ function removeControls() {
   this.endPointHandle = null
 }
 
-// 隐藏控制点
+// 隐藏控制点。直线没有 controlLine1，但端点手柄仍然在，不能提前 return。
 function hideControls() {
-  if (!this.controlLine1) return
-  ;[
+  const items = [
     this.controlLine1,
     this.controlLine2,
     this.controlPoint1,
-    this.controlPoint2
-  ].forEach(item => {
-    item.hide()
+    this.controlPoint2,
+    this.startPointHandle,
+    this.endPointHandle
+  ]
+  if (items.every(item => !item)) return
+  items.forEach(item => {
+    if (item) item.hide()
   })
 }
 
 // 显示控制点
 function showControls() {
-  if (!this.controlLine1) return
-  ;[
+  const items = [
     this.controlLine1,
     this.controlLine2,
     this.controlPoint1,
-    this.controlPoint2
-  ].forEach(item => {
-    item.show()
+    this.controlPoint2,
+    this.startPointHandle,
+    this.endPointHandle
+  ]
+  if (items.every(item => !item)) return
+  items.forEach(item => {
+    if (item) item.show()
   })
 }
 
