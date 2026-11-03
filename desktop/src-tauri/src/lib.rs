@@ -2149,6 +2149,11 @@ fn consume_open_request(
     launch.lock().ok().and_then(|mut slot| slot.take())
 }
 
+// macOS 用 Opened 事件，不读命令行。非测试构建里如果还留着这个函数，会被判成死代码。
+#[cfg(any(
+    test,
+    not(any(target_os = "macos", target_os = "ios", target_os = "android"))
+))]
 fn launch_document_from_args<I, S>(args: I) -> Option<PathBuf>
 where
     I: IntoIterator<Item = S>,
