@@ -154,7 +154,9 @@ jobs:
           bun simple-mind-map/test/outer-frame-padding.test.cjs
           bun simple-mind-map/test/associative-line-path.test.cjs
           bun simple-mind-map/test/alignment-guide.test.cjs
+          bun simple-mind-map/test/generalization-bracket.test.cjs
           bun simple-mind-map/test/sanitize-rich-text.test.cjs
+          bun simple-mind-map/test/cjk-latin-spacing.test.cjs
           bun web/src/utils/editorGuards.test.cjs
           bun web/src/utils/desktopShell.test.cjs
 
