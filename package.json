@@ -10,6 +10,6 @@
     "format:rust:check": "cargo fmt --manifest-path desktop/src-tauri/Cargo.toml --check"
   },
   "devDependencies": {
-    "prettier": "^3.9.10"
+    "prettier": "^3.10.0"
   }
 }
