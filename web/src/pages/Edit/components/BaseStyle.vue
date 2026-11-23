@@ -1129,7 +1129,7 @@ export default {
       this.outerFramePadding.outerFramePaddingX =
         this.mindMap.getConfig('outerFramePaddingX')
       this.outerFramePadding.outerFramePaddingY =
-        this.mindMap.getConfig('outerFramePaddingX')
+        this.mindMap.getConfig('outerFramePaddingY')
     },
 
     // margin初始值

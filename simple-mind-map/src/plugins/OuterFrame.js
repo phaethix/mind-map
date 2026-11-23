@@ -8,7 +8,8 @@ import {
 import {
   parseAddNodeList,
   getNodeOuterFrameList,
-  clampOuterFramePadding
+  clampOuterFramePadding,
+  collectNodeRects
 } from './outerFrame/outerFrameUtils'
 import outerFrameTextMethods from './outerFrame/outerFrameText'
 
@@ -258,6 +259,19 @@ class OuterFrame {
     if (!tree) return
     const t = this.mindMap.draw.transform()
     const { outerFramePaddingX, outerFramePaddingY } = this.mindMap.opt
+    // 收集整棵树里的节点：外框上方的文字可能来自其他分支，
+    // 只看同级兄弟会漏掉这种跨分支的遮挡。
+    const nodeRectList = collectNodeRects(tree, root => {
+      return getNodeTreeBoundingRect(
+        root,
+        0,
+        0,
+        0,
+        0,
+        false,
+        false
+      )
+    })
     walk(
       tree,
       null,
@@ -284,17 +298,12 @@ class OuterFrame {
               !Number.isFinite(height)
             )
               return
-            // 上下留白要避开相邻兄弟节点，否则外框的边框会压到隔壁的文字上
-            const siblings = cur.children || []
+            // 上下留白要避开附近的节点，否则外框的边框会压到隔壁的文字上
             const padding = clampOuterFramePadding(
               rect,
-              siblings[range[0] - 1]
-                ? getNodeTreeBoundingRect(siblings[range[0] - 1])
-                : null,
-              siblings[range[1] + 1]
-                ? getNodeTreeBoundingRect(siblings[range[1] + 1])
-                : null,
-              outerFramePaddingY
+              nodeRectList,
+              outerFramePaddingY,
+              outerFramePaddingX
             )
             const el = this.createOuterFrameEl(
               (left -

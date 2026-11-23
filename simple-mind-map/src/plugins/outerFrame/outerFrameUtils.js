@@ -1,4 +1,4 @@
-import { getTopAncestorsFomNodeList } from '../../utils'
+import { getTopAncestorsFomNodeList, walk } from '../../utils'
 
 const isFiniteRect = rect => {
   return (
@@ -10,39 +10,61 @@ const isFiniteRect = rect => {
   )
 }
 
-// 水平方向没有重叠，说明这个兄弟在旁边而不是上下
-const separatedHorizontally = (a, b) => {
-  if (!Number.isFinite(a.left) || !Number.isFinite(a.width)) return false
-  if (!Number.isFinite(b.left) || !Number.isFinite(b.width)) return false
-  const aRight = a.left + a.width
-  const bRight = b.left + b.width
-  return aRight <= b.left || bRight <= a.left
-}
-
-// 外框的上下留白不能越过相邻兄弟节点：兄弟之间的空隙有限，
+// 外框的上下留白不能越过附近的节点：节点之间的空隙有限，
 // 留白超过空隙的一半就会压到隔壁的文字上，所以按空隙的一半封顶。
-export const clampOuterFramePadding = (
-  rect,
-  aboveRect,
-  belowRect,
-  paddingY
-) => {
+export const clampOuterFramePadding = (rect, rectList, paddingY, paddingX) => {
   const res = {
     top: paddingY,
     bottom: paddingY
   }
+  const horizontalPadding = Number.isFinite(paddingX) ? paddingX : 0
   if (isFiniteRect(rect)) {
-    // 左右并排的兄弟没有垂直方向的空隙，不能拿来压上下留白
-    if (isFiniteRect(aboveRect) && !separatedHorizontally(rect, aboveRect)) {
-      const gap = rect.top - (aboveRect.top + aboveRect.height)
-      res.top = Math.min(res.top, Math.max(gap / 2, 0))
-    }
-    if (isFiniteRect(belowRect) && !separatedHorizontally(rect, belowRect)) {
-      const gap = belowRect.top - (rect.top + rect.height)
-      res.bottom = Math.min(res.bottom, Math.max(gap / 2, 0))
-    }
+    // 留白后外框会横向扩张，扩张范围内有节点时也要参与上下避让
+    const frameLeft = rect.left - horizontalPadding
+    const frameRight = rect.left + rect.width + horizontalPadding
+    ;(rectList || []).forEach(nearbyRect => {
+      if (!isFiniteRect(nearbyRect)) return
+      const nearbyRight = nearbyRect.left + nearbyRect.width
+      const nearbyBottom = nearbyRect.top + nearbyRect.height
+      const rectBottom = rect.top + rect.height
+      // 外框横向扩张后仍碰不到的节点，或者完全被外框罩住的节点，不参与避让
+      if (
+        nearbyRight <= frameLeft ||
+        nearbyRect.left >= frameRight ||
+        (nearbyRect.left >= rect.left &&
+          nearbyRight <= rect.left + rect.width &&
+          nearbyRect.top >= rect.top &&
+          nearbyBottom <= rectBottom)
+      ) {
+        return
+      }
+      if (nearbyBottom <= rect.top) {
+        const gap = rect.top - nearbyBottom
+        res.top = Math.min(res.top, Math.max(gap / 2, 0))
+      } else if (nearbyRect.top >= rectBottom) {
+        const gap = nearbyRect.top - rectBottom
+        res.bottom = Math.min(res.bottom, Math.max(gap / 2, 0))
+      }
+    })
   }
   return res
+}
+
+// 收集整棵树里的可见节点包围框，外框不只会被同级兄弟压到，
+// 其他分支在画布上相邻的节点也可能紧贴在上下方。
+export const collectNodeRects = (root, getRect) => {
+  const rectList = []
+  walk(root, null, node => {
+    if (node.group) {
+      rectList.push(getRect(node))
+    }
+    ;(node._generalizationList || []).forEach(item => {
+      if (item.generalizationNode && item.generalizationNode.group) {
+        rectList.push(getRect(item.generalizationNode))
+      }
+    })
+  })
+  return rectList
 }
 
 // 解析要添加外框的节点实例列表
